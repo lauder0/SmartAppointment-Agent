@@ -1,0 +1,46 @@
+{
+  "cases": [
+    {
+      "id": "SUP001",
+      "title": "Supervisor routes service catalog to consultation subgraph",
+      "category": "supervisor_contract",
+      "tags": ["supervisor", "consultation"],
+      "side_effect": false,
+      "turns": [
+        {
+          "user": "\u4f60\u4eec\u6709\u54ea\u4e9b\u670d\u52a1\u9879\u76ee\uff1f",
+          "expect": {
+            "route_action": "answer_knowledge",
+            "state_equals": {
+              "active_agent": "consultation",
+              "consultation.status": "completed"
+            },
+            "state_path_exists": ["shared_focus_context"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "SUP002",
+      "title": "Supervisor routes realtime schedule query to availability subgraph",
+      "category": "supervisor_contract",
+      "tags": ["supervisor", "availability"],
+      "side_effect": false,
+      "turns": [
+        {
+          "user": "\u660e\u5929\u4e0b\u5348\u56db\u70b9\u6709\u54ea\u4e9b\u5973\u6280\u5e08\u53ef\u4ee5\u7ea6\u4e00\u4e2a\u5c0f\u65f6\uff1f",
+          "expect": {
+            "route_action": "query_availability",
+            "state_equals": {
+              "active_agent": "availability",
+              "availability.status": "completed"
+            },
+            "state_list_min_length": {
+              "availability.options": 1
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

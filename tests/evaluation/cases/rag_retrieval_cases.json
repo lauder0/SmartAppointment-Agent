@@ -1,0 +1,192 @@
+{
+  "version": "2026-06-07",
+  "description": "Knowledge retrieval cases for the current RAG implementation.",
+  "cases": [
+    {
+      "id": "RAG001",
+      "query": "你们几点开门，晚上几点关门？",
+      "expected_categories": ["营业时间"],
+      "expected_terms": ["营业时间", "上午9点", "晚上10点"]
+    },
+    {
+      "id": "RAG002",
+      "query": "全身推拿多少钱，多久？",
+      "expected_categories": ["服务项目"],
+      "expected_terms": ["全身推拿", "120", "60分钟"]
+    },
+    {
+      "id": "RAG003",
+      "query": "肩颈推拿适合什么人？",
+      "expected_categories": ["服务介绍"],
+      "expected_terms": ["肩颈推拿", "颈椎", "肩膀"]
+    },
+    {
+      "id": "RAG004",
+      "query": "足底按摩有什么作用？",
+      "expected_categories": ["服务介绍"],
+      "expected_terms": ["足底按摩", "睡眠", "疲劳"]
+    },
+    {
+      "id": "RAG005",
+      "query": "背部推拿多少钱？",
+      "expected_categories": ["服务项目"],
+      "expected_terms": ["背部推拿", "90", "40分钟"]
+    },
+    {
+      "id": "RAG006",
+      "query": "你们店在哪里？",
+      "expected_categories": ["门店地址"],
+      "expected_terms": ["中关村", "海淀", "地址"]
+    },
+    {
+      "id": "RAG007",
+      "query": "会员充值有什么优惠？",
+      "expected_categories": ["会员服务"],
+      "expected_terms": ["会员", "充值", "优惠"]
+    },
+    {
+      "id": "RAG008",
+      "query": "临时有事可以取消预约吗？",
+      "expected_categories": ["预约政策"],
+      "expected_terms": ["取消", "更改", "2小时"]
+    },
+    {
+      "id": "RAG009",
+      "query": "你们有男技师和女技师吗？",
+      "expected_categories": ["技师信息"],
+      "expected_terms": ["男", "女", "技师"]
+    },
+    {
+      "id": "RAG010",
+      "query": "技师专业吗，有没有经验？",
+      "expected_categories": ["服务质量"],
+      "expected_terms": ["经验", "专业", "培训"]
+    },
+    {
+      "id": "RAG011",
+      "query": "怎么坐地铁去你们店？",
+      "expected_categories": ["门店地址"],
+      "expected_terms": ["地铁", "A口", "步行"]
+    },
+    {
+      "id": "RAG012",
+      "query": "办会员生日有没有优惠？",
+      "expected_categories": ["会员服务"],
+      "expected_terms": ["会员", "生日", "优惠"]
+    },
+    {
+      "id": "RAG013",
+      "query": "如果我临时来不了怎么办，会不会扣钱？",
+      "expected_categories": ["预约政策"],
+      "expected_terms": ["取消", "更改", "费用"]
+    },
+    {
+      "id": "RAG014",
+      "query": "充值一千送多少？",
+      "expected_categories": ["会员服务"],
+      "expected_terms": ["1000", "150", "会员"]
+    },
+    {
+      "id": "RAG015",
+      "query": "我长期低头办公，选哪个项目？",
+      "expected_categories": ["服务介绍"],
+      "expected_terms": ["肩颈推拿", "电脑", "颈椎"]
+    },
+    {
+      "id": "RAG016",
+      "query": "睡不好想放松脚，推荐什么？",
+      "expected_categories": ["服务介绍"],
+      "expected_terms": ["足底按摩", "睡眠", "疲劳"]
+    },
+    {
+      "id": "RAG017",
+      "query": "你们离地铁口远不远？",
+      "expected_categories": ["门店地址"],
+      "expected_terms": ["地铁", "步行", "100米"]
+    },
+    {
+      "id": "RAG018",
+      "query": "技师是随便找的吗，靠谱吗？",
+      "expected_categories": ["服务质量", "技师信息"],
+      "expected_terms": ["专业", "培训", "资格"]
+    },
+    {
+      "id": "RAG019",
+      "query": "第一次来不知道选什么项目",
+      "expected_categories": ["服务选择建议", "服务介绍"],
+      "expected_terms": ["第一次", "全身推拿", "推荐"]
+    },
+    {
+      "id": "RAG020",
+      "query": "背部紧张适合什么服务？",
+      "expected_categories": ["服务选择建议", "服务介绍"],
+      "expected_terms": ["背部推拿", "背部紧张", "背部肌肉"]
+    },
+    {
+      "id": "RAG021",
+      "query": "可以开发票吗，支持微信支付吗？",
+      "expected_categories": ["支付发票"],
+      "expected_terms": ["发票", "微信", "支付宝"]
+    },
+    {
+      "id": "RAG022",
+      "query": "附近能停车吗？",
+      "expected_categories": ["门店地址"],
+      "expected_terms": ["停车", "地下停车场", "地铁"]
+    },
+    {
+      "id": "RAG023",
+      "query": "我迟到了十五分钟还能做吗？",
+      "expected_categories": ["预约政策"],
+      "expected_terms": ["迟到", "15分钟", "不顺延"]
+    },
+    {
+      "id": "RAG024",
+      "query": "推拿完以后可以马上运动喝酒吗？",
+      "expected_categories": ["健康注意事项"],
+      "expected_terms": ["推拿后", "剧烈运动", "饮酒"]
+    },
+    {
+      "id": "RAG025",
+      "query": "孕妇或者皮肤破了能按摩吗？",
+      "expected_categories": ["健康注意事项"],
+      "expected_terms": ["孕期", "皮肤破损", "医疗诊断"]
+    },
+    {
+      "id": "RAG026",
+      "query": "我想找手劲重一点的技师",
+      "expected_categories": ["技师信息"],
+      "expected_terms": ["力气大", "重手法", "张伟", "郑斌"]
+    },
+    {
+      "id": "RAG027",
+      "query": "有没有手法轻柔一点适合放松睡觉的技师？",
+      "expected_categories": ["技师信息"],
+      "expected_terms": ["轻柔", "舒缓", "助眠", "李娜"]
+    },
+    {
+      "id": "RAG028",
+      "query": "指定的技师没空怎么办？",
+      "expected_categories": ["技师信息"],
+      "expected_terms": ["指定技师", "不可约", "替代技师"]
+    },
+    {
+      "id": "RAG029",
+      "query": "会员优惠能和活动一起用吗？",
+      "expected_categories": ["会员服务"],
+      "expected_terms": ["优惠叠加", "活动", "会员"]
+    },
+    {
+      "id": "RAG030",
+      "query": "服务过程中觉得太重了可以让技师轻一点吗？",
+      "expected_categories": ["服务质量"],
+      "expected_terms": ["力度", "轻一点", "调整手法"]
+    },
+    {
+      "id": "RAG031",
+      "query": "确认预约之前我能改项目或者换技师吗？",
+      "expected_categories": ["预约政策"],
+      "expected_terms": ["更改预约", "换项目", "换技师"]
+    }
+  ]
+}

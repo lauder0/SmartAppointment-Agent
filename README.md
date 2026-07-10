@@ -1,0 +1,138 @@
+# Smart Appointment AI Agent 3.0
+
+3.0 uses a **Supervisor + Specialist Agents** architecture. The supervisor owns intent routing and cross-agent handoff. Consultation, availability, booking, and recommendation each own their own internal state, nodes, and graph entrypoint.
+
+## Architecture
+
+```text
+User
+  -> Web/API Chat
+  -> Session State Store
+  -> Supervisor Graph
+      -> Consultation Agent
+      -> Availability Agent
+      -> Booking Agent
+      -> Recommendation Agent
+      -> Fallback Handler
+  -> Response
+```
+
+## Core Ideas
+
+- `Supervisor`: routes user intent, owns cross-agent handoff, and tracks active agent/task.
+- `Consultation Agent`: answers services, prices, address, business hours, policies, and other knowledge questions.
+- `Availability Agent`: parses schedule constraints and returns realtime available technician options.
+- `Booking Agent`: owns booking draft, slot filling, matching, confirmation, guard, creation, and completion.
+- `Recommendation Agent`: owns the preference-recall and recommendation boundary.
+- `Fallback Handler`: handles clarification, greeting, courtesy, and unsupported requests.
+
+## State Model
+
+3.0 uses `SupervisorState`:
+
+```text
+SupervisorState
+  - session_id / user_id / messages
+  - active_agent / active_task / task_stack
+  - shared_focus_context
+  - consultation
+  - availability
+  - booking
+  - recommendation
+  - route_decision
+  - handoff_payload
+  - last_agent_result
+  - tool_results
+```
+
+Important ownership rules:
+
+- `shared_focus_context`: cross-agent facts such as service type, time, duration, gender preference, technician, and style preference.
+- `consultation`: private consultation state.
+- `availability`: private availability state, including query criteria, candidate options, and available technician names.
+- `booking`: private transaction state. Only Booking Agent can progress toward guarded appointment creation.
+- `recommendation`: private recommendation state and preference-recall boundary.
+
+## Specialist Agent Layout
+
+```text
+agents/
+  supervisor/
+    graph_builder.py
+    nodes.py
+    router_actions.py
+    routing.py
+    state.py
+  shared/
+    state.py
+    node_utils.py
+    response_composer.py
+    context/
+      rules.py
+  specialists/
+    consultation/
+      actions.py
+      graph.py
+      nodes.py
+      response_generator.py
+      state.py
+    availability/
+      actions.py
+      graph.py
+      nodes.py
+      state.py
+    booking/
+      actions.py
+      behavior_actions.py
+      graph.py
+      flow.py
+      message_builder.py
+      nodes.py
+      parser.py
+      state.py
+    recommendation/
+      graph.py
+      memory.py
+      nodes.py
+      state.py
+    fallback.py
+    fallback_actions.py
+    common.py
+tools/
+services/
+db/
+tests/
+```
+
+The 3.0 specialist agents now own their domain actions directly. Parsing, response generation, availability lookup, booking guards, and routing helpers live inside the relevant agent package, while `tools/` remains the stable callable boundary over business services. This keeps the graph readable today and leaves a clear path to future tool-calling agents.
+
+## Run
+
+```powershell
+Copy-Item .env.example .env
+# Fill in the required API keys in .env
+
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+python -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+The local `.env`, SQLite database, Python caches, and generated evaluation
+reports are ignored by Git. Do not commit real API keys. If a key has ever been
+shared or committed, revoke it before publishing the repository.
+
+## Test And Evaluation
+
+```powershell
+python -m pytest tests\contract\supervisor -q
+python tests\evaluation\runners\run_eval.py --cases-file tests\evaluation\cases\supervisor_state_contract_cases.json
+python tests\evaluation\runners\run_eval.py --cases-file tests\evaluation\cases\state_contract_cases.json
+```
+
+## Current Boundaries
+
+- The outer architecture is a true supervisor plus specialist-agent boundary.
+- Each business specialist now has its own state/nodes/graph package.
+- Stable business actions are now organized inside the owning agent package to preserve tested parsing, RAG, availability, matching, guard, and write behavior without an extra business-node layer.
+- `tools/` wraps service calls and reusable business operations so future LLM tool-calling can reuse the same interface.
+- Recommendation has a real agent package boundary but remains conservative until proactive recommendation routes are added.

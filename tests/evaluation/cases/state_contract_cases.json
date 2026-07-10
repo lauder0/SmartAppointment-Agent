@@ -1,0 +1,396 @@
+{
+  "suite": "SmartAppointment state contract evaluation",
+  "description": "Focused cases that assert route_decision, booking state, focus context, availability_result, and write-safety contracts.",
+  "cases": [
+    {
+      "id": "ND001",
+      "title": "知识咨询只回答，不进入预约状态",
+      "category": "newdesign_contract",
+      "tags": ["single_turn", "knowledge", "route_decision"],
+      "turns": [
+        {
+          "user": "你们有哪些服务项目？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "route_action": "answer_knowledge",
+            "booking_status": "idle",
+            "state_equals": {
+              "focus_context.last_offer": "service_catalog"
+            },
+            "must_include_all": ["全身推拿", "肩颈推拿", "足底按摩", "背部推拿"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND002",
+      "title": "排班查询只更新 focus_context 和 availability_result",
+      "category": "newdesign_contract",
+      "tags": ["single_turn", "availability", "route_decision"],
+      "turns": [
+        {
+          "user": "明天下午三点有哪些女技师可以约一个小时？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "route_action": "query_availability",
+            "booking_status": "idle",
+            "state_equals": {
+              "focus_context.gender_preference": "女",
+              "focus_context.duration_minutes": 60,
+              "availability_result.criteria_snapshot.gender": "女",
+              "availability_result.criteria_snapshot.duration_minutes": 60
+            },
+            "state_contains": {
+              "focus_context.start_time": "15:00"
+            },
+            "state_list_min_length": {
+              "availability_result.options": 1
+            },
+            "must_not_include_any": ["请问是否确认预约", "预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND003",
+      "title": "预约信息缺失时进入 drafting 并追问缺失字段",
+      "category": "newdesign_contract",
+      "tags": ["single_turn", "appointment", "slot_filling"],
+      "turns": [
+        {
+          "user": "我要预约按摩",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "drafting",
+            "state_equals": {
+              "booking.draft.service_type": "按摩"
+            },
+            "state_contains": {
+              "booking.missing_fields": "start_time"
+            },
+            "must_include_any": ["请问", "时间"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND004",
+      "title": "完整预约只进入待确认，不直接写库",
+      "category": "newdesign_contract",
+      "tags": ["single_turn", "appointment", "confirmation_guard"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "state_equals": {
+              "booking.draft.service_type": "按摩",
+              "booking.draft.duration_minutes": 60,
+              "booking.selected_option.technician_name": "张伟"
+            },
+            "state_contains": {
+              "booking.draft.start_time": "15:00"
+            },
+            "must_include_any": ["请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND005",
+      "title": "待确认时寒暄不应确认或清理 booking",
+      "category": "newdesign_contract",
+      "tags": ["multi_turn", "confirmation_guard", "greeting"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation"
+          }
+        },
+        {
+          "user": "你好",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "unsupported",
+            "booking_status": "awaiting_confirmation",
+            "state_equals": {
+              "booking.selected_option.technician_name": "张伟"
+            },
+            "must_include_any": ["等待您确认", "确认", "修改"],
+            "must_not_include_any": ["预约成功", "已取消"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND006",
+      "title": "待确认时修改时间回到 booking_parse 并重新待确认",
+      "category": "newdesign_contract",
+      "tags": ["multi_turn", "modify_booking"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation"
+          }
+        },
+        {
+          "user": "改成四点",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "state_contains": {
+              "booking.draft.start_time": "2026-07-01 16:00"
+            },
+            "must_include_all": ["16:00-17:00", "请问是否确认预约"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND007",
+      "title": "待确认时取消只取消草稿，不写库",
+      "category": "newdesign_contract",
+      "tags": ["multi_turn", "cancel_booking"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation"
+          }
+        },
+        {
+          "user": "取消",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "cancel_booking",
+            "booking_status": "cancelled",
+            "must_include_any": ["已取消", "重新指定"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND008",
+      "title": "排班结果可以转入预约草稿",
+      "category": "newdesign_contract",
+      "tags": ["multi_turn", "availability_to_booking"],
+      "turns": [
+        {
+          "user": "明天下午三点有哪些女技师可以约一个小时？",
+          "expect": {
+            "route_action": "query_availability",
+            "booking_status": "idle",
+            "state_list_min_length": {
+              "availability_result.options": 1
+            }
+          }
+        },
+        {
+          "user": "那就帮我预约李娜的按摩",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "state_equals": {
+              "booking.draft.technician_name": "李娜",
+              "booking.draft.service_type": "按摩"
+            },
+            "must_include_any": ["请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND009",
+      "title": "排班筛选后选择服务项目应进入预约流程",
+      "category": "newdesign_contract",
+      "tags": ["multi_turn", "availability_to_booking", "service_selection"],
+      "turns": [
+        {
+          "user": "明天下午三点有哪些女技师可以约？",
+          "expect": {
+            "route_action": "query_availability",
+            "booking_status": "idle",
+            "state_list_min_length": {
+              "availability_result.options": 1
+            }
+          }
+        },
+        {
+          "user": "我想要做全身推拿",
+          "expect": {
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "state_equals": {
+              "booking.draft.service_type": "全身推拿"
+            },
+            "must_include_any": ["多长时间", "时长", "多久"],
+            "must_not_include_any": ["我查询了实时排班"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND010",
+      "title": "待确认时换技师应排除当前技师并重新待确认",
+      "category": "newdesign_contract",
+      "tags": ["multi_turn", "modify_booking", "replace_technician", "confirmation_guard"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "state_equals": {
+              "booking.selected_option.technician_name": "张伟"
+            }
+          }
+        },
+        {
+          "user": "我想换一个技师！",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "state_contains": {
+              "booking.excluded_technician_ids": "1"
+            },
+            "state_not_equals": {
+              "booking.selected_option.technician_name": "张伟"
+            },
+            "must_include_any": ["请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND011",
+      "title": "待确认时修改项目应保留时间和技师并重新待确认",
+      "category": "newdesign_contract",
+      "tags": ["multi_turn", "modify_booking", "service_selection", "confirmation_guard"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做全身推拿，60分钟",
+          "expect": {
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation"
+          }
+        },
+        {
+          "user": "换成肩颈推拿",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "state_equals": {
+              "booking.draft.service_type": "肩颈推拿",
+              "booking.selected_option.technician_name": "张伟"
+            },
+            "state_contains": {
+              "booking.draft.start_time": "15:00"
+            },
+            "must_include_any": ["肩颈推拿", "请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND012",
+      "title": "待确认时临时咨询价格不应清空预约草稿",
+      "category": "newdesign_contract",
+      "tags": ["multi_turn", "intent_switch", "knowledge", "confirmation_guard"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做全身推拿，60分钟",
+          "expect": {
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation"
+          }
+        },
+        {
+          "user": "肩颈推拿多少钱？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "route_action": "answer_knowledge",
+            "booking_status": "awaiting_confirmation",
+            "state_equals": {
+              "booking.selected_option.technician_name": "张伟",
+              "booking.draft.service_type": "全身推拿"
+            },
+            "must_include_any": ["80", "肩颈"],
+            "must_not_include_any": ["预约成功", "已取消"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND013",
+      "title": "排班上下文可继续按手法偏好筛选",
+      "category": "newdesign_contract",
+      "tags": ["multi_turn", "availability", "preference", "context_resume"],
+      "turns": [
+        {
+          "user": "明天上午十点有哪些女技师可以约一个小时？",
+          "expect": {
+            "route_action": "query_availability",
+            "booking_status": "idle",
+            "state_equals": {
+              "focus_context.gender_preference": "女",
+              "focus_context.duration_minutes": 60
+            },
+            "state_list_min_length": {
+              "availability_result.options": 1
+            }
+          }
+        },
+        {
+          "user": "手法轻柔一点的呢？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "route_action": "query_availability",
+            "booking_status": "idle",
+            "state_contains": {
+              "focus_context.start_time": "10:00",
+              "availability_result.criteria_snapshot.preference": "轻"
+            },
+            "must_include_any": ["可约", "空闲", "技师"],
+            "must_not_include_any": ["请问是否确认预约", "预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ND014",
+      "title": "营业时间外预约应被 guard 拦截并要求换时间",
+      "category": "newdesign_contract",
+      "tags": ["single_turn", "appointment", "time_boundary", "guard"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天早上九点做按摩，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "drafting",
+            "must_include_any": ["营业时间", "换一个时间", "目前只能预约", "可预约时间范围", "调整预约时间"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    }
+  ]
+}

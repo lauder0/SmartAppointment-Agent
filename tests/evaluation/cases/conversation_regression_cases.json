@@ -1,0 +1,1324 @@
+{
+  "version": "2026-06-07",
+  "description": "SmartAppointment-Agent LangGraph evaluation set. Cases cover knowledge consultation, realtime availability, appointment drafting, multi-turn context, intent switching, confirmation, unrelated input, and robustness.",
+  "defaults": {
+    "language": "zh-CN",
+    "new_session_per_case": true,
+    "side_effect": false
+  },
+  "cases": [
+    {
+      "id": "K001",
+      "title": "静态咨询：服务项目",
+      "category": "knowledge_query",
+      "tags": ["single_turn", "rag", "service_catalog"],
+      "turns": [
+        {
+          "user": "你们有哪些服务？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["推拿", "按摩", "服务"],
+            "must_not_include_any": ["暂不支持", "预约机器人"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "K002",
+      "title": "静态咨询：价格",
+      "category": "knowledge_query",
+      "tags": ["single_turn", "rag", "price"],
+      "turns": [
+        {
+          "user": "肩颈推拿多少钱？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["80", "价格", "收费", "肩颈"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "K003",
+      "title": "静态咨询：营业时间",
+      "category": "knowledge_query",
+      "tags": ["single_turn", "rag", "business_hours"],
+      "turns": [
+        {
+          "user": "你们几点开门，营业到几点？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["营业", "开门", "晚上", "10", "22"],
+            "must_not_include_any": ["预约机器人"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "K004",
+      "title": "静态咨询：门店地址",
+      "category": "knowledge_query",
+      "tags": ["single_turn", "rag", "address"],
+      "turns": [
+        {
+          "user": "店在哪里？怎么过去？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["地址", "中关村", "海淀", "交通"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "K005",
+      "title": "静态咨询：会员政策",
+      "category": "knowledge_query",
+      "tags": ["single_turn", "rag", "membership"],
+      "turns": [
+        {
+          "user": "你们会员有什么优惠？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["会员", "优惠", "充值"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "K006",
+      "title": "静态咨询：预约政策",
+      "category": "knowledge_query",
+      "tags": ["single_turn", "rag", "policy"],
+      "turns": [
+        {
+          "user": "如果临时有事，可以取消或者改时间吗？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["取消", "更改", "提前", "预约"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A001",
+      "title": "实时排班：今天指定时间点",
+      "category": "availability_query",
+      "tags": ["single_turn", "availability", "specific_time"],
+      "turns": [
+        {
+          "user": "明天下午三点有哪些技师可以约？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["实时排班", "15:00"],
+            "must_include_any": ["空闲", "可约", "技师"],
+            "must_not_include_any": ["预约机器人", "暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A002",
+      "title": "实时排班：指定时长",
+      "category": "availability_query",
+      "tags": ["single_turn", "availability", "duration"],
+      "turns": [
+        {
+          "user": "明天下午三点想看一下两个小时有没有空位",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["15:00", "17:00"],
+            "must_include_any": ["120分钟", "两个小时", "2小时", "可约"],
+            "must_not_include_any": ["请问您需要什么服务项目"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A003",
+      "title": "实时排班：性别筛选",
+      "category": "availability_query",
+      "tags": ["single_turn", "availability", "gender"],
+      "turns": [
+        {
+          "user": "明天下午四点有哪些女技师可以约一个小时？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["女技师", "16:00"],
+            "must_include_any": ["可约", "空闲", "60分钟"],
+            "must_not_include_any": ["预约机器人"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "A004",
+      "title": "实时排班：查询某个技师",
+      "category": "availability_query",
+      "tags": ["single_turn", "availability", "technician_name"],
+      "turns": [
+        {
+          "user": "张伟明天下午三点有空吗？我想做60分钟",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["张伟", "15:00", "60分钟", "可约", "空闲"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "AM001",
+      "title": "多轮实时排班：时间点 -> 时长 -> 性别",
+      "category": "availability_query",
+      "tags": ["multi_turn", "availability", "follow_up"],
+      "turns": [
+        {
+          "user": "你好，帮我查查明天下午三点有哪些技师可以约",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["实时排班", "15:00"],
+            "must_include_any": ["空闲", "可约"]
+          }
+        },
+        {
+          "user": "我想约2小时",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["15:00", "17:00"],
+            "must_include_any": ["120分钟", "可约"],
+            "must_not_include_any": ["请问您需要什么服务项目", "预约机器人"]
+          }
+        },
+        {
+          "user": "按摩，女技师",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["15:00", "17:00", "女技师"],
+            "must_include_any": ["可约", "李娜", "赵敏", "孙丽", "吴婷", "何静"],
+            "must_not_include_any": ["抱歉，实时排班查询失败", "预约机器人"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "AM002",
+      "title": "多轮实时排班：时间点 -> 换时间",
+      "category": "availability_query",
+      "tags": ["multi_turn", "availability", "change_time"],
+      "turns": [
+        {
+          "user": "明天三点有哪些男技师空闲？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["15:00", "男技师"]
+          }
+        },
+        {
+          "user": "那换成四点呢？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["16:00", "男技师"],
+            "must_not_include_any": ["预约机器人"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "AM003",
+      "title": "多轮实时排班：时间点 -> 时长 -> 指定技师",
+      "category": "availability_query",
+      "tags": ["multi_turn", "availability", "technician_name"],
+      "turns": [
+        {
+          "user": "明天下午两点有技师可以约吗？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["14:00", "空闲", "可约"]
+          }
+        },
+        {
+          "user": "90分钟",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["90分钟", "14:00", "15:30"]
+          }
+        },
+        {
+          "user": "张伟可以吗？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["张伟", "14:00", "90分钟", "可约", "暂时没有"],
+            "must_not_include_any": ["预约机器人"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P001",
+      "title": "预约草稿：缺少时间、时长、性别",
+      "category": "appointment",
+      "tags": ["single_turn", "appointment", "slot_filling"],
+      "turns": [
+        {
+          "user": "我要预约按摩",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "collect_appointment_info",
+            "must_include_any": ["预约的时间", "多长时间", "男技师", "女技师"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P002",
+      "title": "预约草稿：多轮补齐基本信息但不写库",
+      "category": "appointment",
+      "tags": ["multi_turn", "appointment", "slot_filling"],
+      "turns": [
+        {
+          "user": "我要预约按摩",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_pending_action": "collect_appointment_info",
+            "must_include_any": ["预约的时间", "多长时间", "男技师", "女技师"]
+          }
+        },
+        {
+          "user": "明天下午三点，60分钟，女技师",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["确认", "请问是否确认预约", "技师", "李娜", "赵敏", "孙丽", "吴婷", "何静"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ],
+      "side_effect": false,
+      "side_effect_note": "Now stops at appointment confirmation and should not write to SQLite before user confirmation."
+    },
+    {
+      "id": "P003",
+      "title": "预约草稿：指定技师但缺少时长",
+      "category": "appointment",
+      "tags": ["single_turn", "appointment", "missing_duration"],
+      "turns": [
+        {
+          "user": "帮我约张伟明天下午三点做按摩",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "collect_appointment_info",
+            "must_include_any": ["多长时间", "时长"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "P004",
+      "title": "预约草稿：明确指定技师、时间、时长、项目",
+      "category": "appointment",
+      "tags": ["single_turn", "appointment", "create"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["确认", "请问是否确认预约", "不空闲", "推荐", "换一个时间"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ],
+      "side_effect": false,
+      "side_effect_note": "Now stops at appointment confirmation and should not write to SQLite before user confirmation."
+    },
+    {
+      "id": "S001",
+      "title": "意图转换：排班查询后明确创建预约",
+      "category": "intent_switch",
+      "tags": ["multi_turn", "availability_to_appointment"],
+      "turns": [
+        {
+          "user": "明天下午三点有哪些女技师可以约一个小时？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["女技师", "15:00", "16:00", "可约"]
+          }
+        },
+        {
+          "user": "那就帮我预约李娜的按摩",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["确认", "请问是否确认预约", "李娜", "请问", "缺少"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ],
+      "side_effect": false,
+      "side_effect_note": "Now stops at appointment confirmation and should not write to SQLite before user confirmation."
+    },
+    {
+      "id": "S002",
+      "title": "意图转换：预约补全中临时咨询服务项目",
+      "category": "intent_switch",
+      "tags": ["multi_turn", "appointment_to_knowledge"],
+      "turns": [
+        {
+          "user": "我要预约明天下午三点，60分钟，女技师",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_pending_action": "collect_appointment_info",
+            "must_include_any": ["什么服务项目", "按摩", "项目"]
+          }
+        },
+        {
+          "user": "你们有哪些服务项目？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["服务", "推拿", "按摩"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "S003",
+      "title": "意图转换：咨询后进入预约草稿",
+      "category": "intent_switch",
+      "tags": ["multi_turn", "knowledge_to_appointment"],
+      "turns": [
+        {
+          "user": "肩颈推拿有什么作用？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["肩颈", "颈椎", "放松", "酸痛"]
+          }
+        },
+        {
+          "user": "那帮我预约这个项目",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "collect_appointment_info",
+            "must_include_any": ["预约的时间", "多长时间", "男技师", "女技师"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "C001",
+      "title": "推荐确认：确认词在等待确认上下文中有效",
+      "category": "confirmation",
+      "tags": ["multi_turn", "confirmation"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点按摩60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["确认", "请问是否确认预约", "推荐", "不空闲", "换一个时间"]
+          }
+        },
+        {
+          "user": "可以",
+          "expect": {
+            "agent_label": "预约机器人",
+            "must_include_any": ["预约成功", "请您明确", "安排"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ],
+      "side_effect": true,
+      "side_effect_note": "May create an appointment. Skipped unless --include-side-effects is passed."
+    },
+    {
+      "id": "O001",
+      "title": "无关问题：天气闲聊",
+      "category": "other",
+      "tags": ["single_turn", "unsupported"],
+      "turns": [
+        {
+          "user": "今天股票行情怎么样？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "other",
+            "must_include_any": ["不太适合深入处理", "服务项目", "预约", "排班"],
+            "must_not_include_any": ["股票行情怎么样"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "O002",
+      "title": "无关问题：开放域闲聊",
+      "category": "other",
+      "tags": ["single_turn", "unsupported"],
+      "turns": [
+        {
+          "user": "帮我写一首关于夏天的诗",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "other",
+            "must_include_any": ["不太适合深入处理", "服务项目", "预约", "排班"],
+            "must_not_include_any": ["夏天的诗"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "O003",
+      "title": "边界降级：能力询问应引导到门店任务",
+      "category": "other",
+      "tags": ["single_turn", "fallback", "capability"],
+      "turns": [
+        {
+          "user": "你能做什么？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "other",
+            "must_include_any": ["服务项目", "价格", "营业时间", "排班", "预约"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "G001",
+      "title": "寒暄输入：普通你好不应返回暂不支持",
+      "category": "greeting",
+      "tags": ["single_turn", "greeting"],
+      "turns": [
+        {
+          "user": "嗨 你好",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "must_include_any": ["您好", "智能预约助手", "服务项目", "预约"],
+            "must_not_include_any": ["暂不支持", "预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "G002",
+      "title": "寒暄输入：等待确认时你好不能被当成确认",
+      "category": "greeting",
+      "tags": ["multi_turn", "greeting", "confirmation_guard"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "awaiting_appointment_confirmation",
+            "must_include_any": ["请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        },
+        {
+          "user": "你好",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "awaiting_appointment_confirmation",
+            "must_include_any": ["等待您确认", "确认", "修改"],
+            "must_not_include_any": ["预约成功", "暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "CTX003",
+      "title": "上下文管理：等待确认时临时咨询不丢待确认状态",
+      "category": "context_management",
+      "tags": ["multi_turn", "confirmation_guard", "knowledge_interrupt"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "awaiting_appointment_confirmation",
+            "must_include_any": ["请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        },
+        {
+          "user": "你们有哪些服务项目？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "state_pending_action": "awaiting_appointment_confirmation",
+            "must_include_any": ["全身推拿", "肩颈推拿", "足底按摩", "背部推拿"],
+            "must_not_include_any": ["预约成功", "暂不支持"]
+          }
+        },
+        {
+          "user": "你好",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "awaiting_appointment_confirmation",
+            "must_include_any": ["等待您确认", "确认", "修改"],
+            "must_not_include_any": ["预约成功", "暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "CTX005",
+      "title": "上下文管理：等待确认时修改预约时间",
+      "category": "context_management",
+      "tags": ["multi_turn", "confirmation_guard", "modify_draft"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "awaiting_appointment_confirmation",
+            "must_include_any": ["请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        },
+        {
+          "user": "改成四点",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "awaiting_appointment_confirmation",
+            "must_include_all": ["16:00-17:00", "请问是否确认预约"],
+            "must_not_include_any": ["预约成功", "暂不支持"],
+            "state_contains": {
+              "appointment.start_time": "16:00"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "CTX006",
+      "title": "上下文管理：等待确认时取消预约",
+      "category": "context_management",
+      "tags": ["multi_turn", "confirmation_guard", "cancel"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "state_pending_action": "awaiting_appointment_confirmation",
+            "must_include_any": ["请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        },
+        {
+          "user": "取消",
+          "expect": {
+            "agent_label": "预约机器人",
+            "must_include_any": ["理解", "换一个时间", "重新指定"],
+            "must_not_include_any": ["预约成功", "暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "R001",
+      "title": "鲁棒性：口语化排班查询",
+      "category": "robustness",
+      "tags": ["single_turn", "availability", "colloquial"],
+      "turns": [
+        {
+          "user": "下午仨点还有人能按不？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["15:00", "可约", "空闲", "技师"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "R002",
+      "title": "鲁棒性：混合中英文预约表达",
+      "category": "robustness",
+      "tags": ["single_turn", "appointment", "mixed_language"],
+      "turns": [
+        {
+          "user": "book一个massage，tomorrow 3pm，female technician，1 hour",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["请问", "预约", "技师", "时间", "项目", "预约成功"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "R003",
+      "title": "鲁棒性：模糊意图但业务相关",
+      "category": "robustness",
+      "tags": ["single_turn", "ambiguous"],
+      "turns": [
+        {
+          "user": "我脖子有点酸，想放松一下，应该选什么？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["肩颈", "推拿", "放松", "服务"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "R004",
+      "title": "鲁棒性：空输入",
+      "category": "robustness",
+      "tags": ["single_turn", "empty_input"],
+      "turns": [
+        {
+          "user": "",
+          "expect": {
+            "state_intent": "other",
+            "must_include_any": ["暂不支持", "按摩", "预约"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "R005",
+      "title": "鲁棒性：上下文隔离",
+      "category": "robustness",
+      "tags": ["multi_turn", "session_isolation"],
+      "turns": [
+        {
+          "user": "明天下午三点有哪些女技师可以约？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["女技师", "15:00"]
+          }
+        },
+        {
+          "user": "谢谢",
+          "expect": {
+            "must_not_include_any": ["抱歉，实时排班查询失败"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "R006",
+      "title": "鲁棒性：排班查询后礼貌结束",
+      "category": "robustness",
+      "tags": ["multi_turn", "courtesy", "availability"],
+      "turns": [
+        {
+          "user": "明天下午五点有哪些技师可以约？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["17:00", "可约", "空闲"]
+          }
+        },
+        {
+          "user": "谢谢，我先看看",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "must_include_any": ["不客气", "继续咨询", "预约"],
+            "must_not_include_any": ["暂不支持", "预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "RW001",
+      "title": "真实长会话：查排班 -> 补时长项目 -> 补偏好 -> 咨询项目 -> 选择项目",
+      "category": "real_world_journey",
+      "tags": ["multi_turn", "long_context", "availability", "knowledge", "service_selection", "regression"],
+      "turns": [
+        {
+          "user": "你好 我想查查明天下午三点有哪些技师可以预约",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["实时排班", "15:00"],
+            "must_include_any": ["空闲", "可约"],
+            "state_contains": {
+              "availability.criteria.start_time": "15:00"
+            }
+          }
+        },
+        {
+          "user": "我想要2小时全身按摩",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["15:00", "17:00"],
+            "must_include_any": ["120分钟", "2小时"],
+            "state_equals": {
+              "availability.criteria.duration_minutes": 120
+            },
+            "state_contains": {
+              "availability.criteria.start_time": "15:00"
+            }
+          }
+        },
+        {
+          "user": "我想要力气大一点的女技师",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["15:00", "17:00", "女技师"],
+            "must_not_include_any": ["13:00-15:00"],
+            "state_equals": {
+              "availability.criteria.gender": "女",
+              "availability.criteria.duration_minutes": 120
+            },
+            "state_contains": {
+              "availability.criteria.start_time": "15:00"
+            }
+          }
+        },
+        {
+          "user": "有哪些服务项目",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["全身推拿", "肩颈推拿", "足底按摩", "背部推拿"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        },
+        {
+          "user": "我想要做背部推拿 40分钟这个",
+          "expect": {
+            "must_include_any": ["背部推拿", "15:00-15:40", "预约机器人", "帮您预约", "请确认"],
+            "must_not_include_any": ["13:00-13:40", "120分钟服务"],
+            "state_equals": {
+              "availability.criteria.duration_minutes": 40
+            },
+            "state_contains": {
+              "availability.criteria.start_time": "15:00"
+            }
+          }
+        },
+        {
+          "user": "我要背部推拿",
+          "expect": {
+            "must_include_any": ["背部推拿", "预约", "确认", "技师"],
+            "must_not_include_any": ["13:00-13:40", "没有理解", "暂不支持"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "RW002",
+      "title": "真实长会话：只咨询服务后选择具体项目，应进入预约补全",
+      "category": "real_world_journey",
+      "tags": ["multi_turn", "knowledge", "service_selection", "appointment"],
+      "turns": [
+        {
+          "user": "有哪些服务项目？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["全身推拿", "肩颈推拿", "足底按摩", "背部推拿"]
+          }
+        },
+        {
+          "user": "我想做背部推拿",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["背部推拿", "请问", "预约时间", "技师", "性别"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        },
+        {
+          "user": "明天下午三点，女技师",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["背部推拿", "40分钟", "确认", "推荐", "预约"],
+            "must_not_include_any": ["请问您需要什么服务项目"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "RW003",
+      "title": "真实长会话：排班上下文中咨询服务，选择项目后应保留原时间",
+      "category": "real_world_journey",
+      "tags": ["multi_turn", "availability", "knowledge", "context_resume", "service_selection"],
+      "turns": [
+        {
+          "user": "明天下午三点有女技师吗？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["15:00", "女技师"],
+            "state_contains": {
+              "availability.criteria.start_time": "15:00"
+            }
+          }
+        },
+        {
+          "user": "你们都有什么项目？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["全身推拿", "肩颈推拿", "足底按摩", "背部推拿"]
+          }
+        },
+        {
+          "user": "那我选背部推拿，40分钟",
+          "expect": {
+            "must_include_any": ["背部推拿", "15:00-15:40", "预约", "确认"],
+            "must_not_include_any": ["13:00", "120分钟"],
+            "state_equals": {
+              "availability.criteria.gender": "女",
+              "availability.criteria.duration_minutes": 40
+            },
+            "state_contains": {
+              "availability.criteria.start_time": "15:00"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "CTX001",
+      "title": "上下文理解：偏好里的“一点”不能被误解析成一点钟",
+      "category": "context_management",
+      "tags": ["multi_turn", "availability", "preference", "time_disambiguation", "regression"],
+      "turns": [
+        {
+          "user": "明天下午三点有哪些技师可以约？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["15:00", "可约", "空闲"],
+            "state_contains": {
+              "availability.criteria.start_time": "15:00"
+            }
+          }
+        },
+        {
+          "user": "想找手劲大一点的女技师",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["15:00", "女技师"],
+            "must_not_include_any": ["13:00", "一点钟"],
+            "state_equals": {
+              "availability.criteria.gender": "女"
+            },
+            "state_contains": {
+              "availability.criteria.start_time": "15:00"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "CTX004",
+      "title": "上下文理解：排班后只补充技师手法偏好",
+      "category": "context_management",
+      "tags": ["multi_turn", "availability", "preference", "regression"],
+      "turns": [
+        {
+          "user": "我想看看明天下午五点有哪些技师可以约",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_any": ["17:00", "可约", "空闲"],
+            "state_contains": {
+              "availability.criteria.start_time": "17:00"
+            }
+          }
+        },
+        {
+          "user": "我想要力气大一点的",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["17:00", "力气大"],
+            "must_include_any": ["张伟", "王强", "郑斌", "深层"],
+            "must_not_include_any": ["13:00", "暂不支持"],
+            "state_equals": {
+              "availability.criteria.preference": "力气大"
+            },
+            "state_contains": {
+              "availability.criteria.start_time": "17:00"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "CTX002",
+      "title": "上下文理解：用户更换服务项目和时长，应覆盖旧项目时长",
+      "category": "context_management",
+      "tags": ["multi_turn", "availability", "service_selection", "duration_update"],
+      "turns": [
+        {
+          "user": "明天下午三点查一下能不能约全身推拿2小时",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "availability_query",
+            "must_include_all": ["15:00", "17:00"],
+            "state_equals": {
+              "availability.criteria.duration_minutes": 120
+            }
+          }
+        },
+        {
+          "user": "我改成背部推拿40分钟",
+          "expect": {
+            "must_include_any": ["背部推拿", "40分钟", "15:00-15:40"],
+            "must_not_include_any": ["120分钟", "15:00-17:00"],
+            "state_equals": {
+              "availability.criteria.duration_minutes": 40
+            },
+            "state_contains": {
+              "availability.criteria.start_time": "15:00"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "MT001",
+      "title": "多轮咨询闭环：连续咨询多个问题但不预约",
+      "category": "multi_turn_consultation",
+      "tags": ["multi_turn", "knowledge", "no_appointment"],
+      "turns": [
+        {
+          "user": "我第一次来，你们有哪些服务？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["全身推拿", "肩颈推拿", "足底按摩", "背部推拿"]
+          }
+        },
+        {
+          "user": "背部推拿多少钱，多久？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["90", "40分钟", "背部"]
+          }
+        },
+        {
+          "user": "营业到几点？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["营业", "22", "晚上"]
+          }
+        },
+        {
+          "user": "好的我先了解一下，谢谢",
+          "expect": {
+            "must_not_include_any": ["预约成功", "请确认预约", "已为您预约"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "MT003",
+      "title": "多轮咨询闭环：服务列表后追问具体项目价格",
+      "category": "multi_turn_consultation",
+      "tags": ["multi_turn", "knowledge", "service_follow_up"],
+      "turns": [
+        {
+          "user": "有哪些服务项目？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["全身推拿", "肩颈推拿", "足底按摩", "背部推拿"]
+          }
+        },
+        {
+          "user": "背部推拿多少钱，多久？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "state_intent": "knowledge_query",
+            "must_include_any": ["90", "40分钟", "背部"],
+            "must_not_include_any": ["暂不支持"]
+          }
+        },
+        {
+          "user": "谢谢",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "must_include_any": ["不客气", "继续咨询", "预约"],
+            "must_not_include_any": ["暂不支持", "预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "MT002",
+      "title": "多轮预约闭环：用户逐步给时间、项目、性别、偏好",
+      "category": "multi_turn_appointment",
+      "tags": ["multi_turn", "appointment", "slot_filling", "preference"],
+      "turns": [
+        {
+          "user": "我想预约",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["服务项目", "预约时间", "技师"]
+          }
+        },
+        {
+          "user": "明天下午三点",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["服务项目", "时长", "技师"]
+          }
+        },
+        {
+          "user": "背部推拿，40分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["背部推拿", "女技师", "男技师", "技师"]
+          }
+        },
+        {
+          "user": "女技师，力气大一点",
+          "expect": {
+            "agent_label": "预约机器人",
+            "state_intent": "appointment",
+            "must_include_any": ["确认", "推荐", "预约", "技师"],
+            "must_not_include_any": ["13:00"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "RW004",
+      "title": "真实路径：排班筛选、咨询项目、选择服务后进入待确认",
+      "category": "real_world_journey",
+      "tags": ["multi_turn", "availability", "knowledge", "availability_to_booking", "service_selection"],
+      "turns": [
+        {
+          "user": "明天上午十点有哪些可以约的技师？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "route_action": "query_availability",
+            "booking_status": "idle",
+            "must_include_any": ["可约", "空闲", "技师"],
+            "must_include_all": ["10:00"],
+            "must_not_include_any": ["请问是否确认预约", "预约成功"]
+          }
+        },
+        {
+          "user": "我想要一个女技师",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "route_action": "query_availability",
+            "booking_status": "idle",
+            "must_include_any": ["女技师", "李娜", "赵敏", "孙丽", "吴婷", "何静"],
+            "must_include_all": ["10:00"],
+            "must_not_include_any": ["预约成功"]
+          }
+        },
+        {
+          "user": "你们有哪些项目？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "route_action": "answer_knowledge",
+            "booking_status": "idle",
+            "must_include_any": ["全身推拿", "肩颈推拿", "足底按摩", "背部推拿"],
+            "must_not_include_any": ["预约成功"]
+          }
+        },
+        {
+          "user": "我要做全身推拿",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "must_include_any": ["全身推拿", "请问是否确认预约", "确认"],
+            "must_include_all": ["10:00"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "RW005",
+      "title": "真实路径：待确认时换技师不能重复推荐当前技师",
+      "category": "real_world_journey",
+      "tags": ["multi_turn", "appointment", "modify_booking", "replace_technician", "confirmation_guard"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做按摩，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "must_include_any": ["张伟", "请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        },
+        {
+          "user": "我想换一个技师！",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "state_not_equals": {
+              "booking.selected_option.technician_name": "张伟"
+            },
+            "must_include_any": ["请问是否确认预约", "确认", "技师"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "CTX007",
+      "title": "上下文恢复：待确认时临时咨询后仍保留预约草稿",
+      "category": "context_management",
+      "tags": ["multi_turn", "intent_switch", "knowledge", "confirmation_guard", "context_resume"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天下午三点做全身推拿，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "must_include_any": ["请问是否确认预约", "确认"]
+          }
+        },
+        {
+          "user": "对了，肩颈推拿多少钱？",
+          "expect": {
+            "agent_label": "咨询机器人",
+            "route_action": "answer_knowledge",
+            "booking_status": "awaiting_confirmation",
+            "must_include_any": ["80", "肩颈"],
+            "must_not_include_any": ["预约成功", "已取消"]
+          }
+        },
+        {
+          "user": "刚才那个预约我还要，改成四点",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "must_include_all": ["16:00"],
+            "must_include_any": ["请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "TB001",
+      "title": "时间边界：营业时间外不能直接预约成功",
+      "category": "time_boundary",
+      "tags": ["single_turn", "appointment", "time_boundary", "guard"],
+      "turns": [
+        {
+          "user": "帮我预约张伟明天早上九点做按摩，60分钟",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "must_include_any": ["营业时间", "换一个时间", "不可约", "只能预约"],
+            "must_not_include_any": ["预约成功", "已为您预约"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "R007",
+      "title": "鲁棒性：口语短句逐步补全预约",
+      "category": "robustness",
+      "tags": ["multi_turn", "appointment", "slot_filling", "robustness"],
+      "turns": [
+        {
+          "user": "想约一下",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "drafting",
+            "must_include_any": ["预约时间", "服务项目", "技师"]
+          }
+        },
+        {
+          "user": "明早十点",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "drafting",
+            "must_include_any": ["服务项目", "时长", "技师"]
+          }
+        },
+        {
+          "user": "肩颈，三十分钟，女的",
+          "expect": {
+            "agent_label": "预约机器人",
+            "route_action": "start_or_continue_booking",
+            "booking_status": "awaiting_confirmation",
+            "must_include_any": ["肩颈", "30分钟", "请问是否确认预约", "确认"],
+            "must_not_include_any": ["预约成功"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "S004",
+      "title": "安全边界：无关请求不应进入预约或排班",
+      "category": "safety_boundary",
+      "tags": ["single_turn", "unsupported", "safety"],
+      "turns": [
+        {
+          "user": "帮我写一段 Python 爬虫代码",
+          "expect": {
+            "route_action": "unsupported",
+            "booking_status": "idle",
+            "must_include_any": ["只能", "预约", "咨询", "门店"],
+            "must_not_include_any": ["请问是否确认预约", "实时排班", "预约成功"]
+          }
+        }
+      ]
+    }
+  ]
+}
