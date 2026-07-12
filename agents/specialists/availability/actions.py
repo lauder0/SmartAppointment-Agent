@@ -54,15 +54,17 @@ async def availability_query_node(state: AgentState) -> AgentState:
         focus_context = state.get("focus_context")
         availability_result = state.get("availability_result")
 
-    return append_assistant_message(
-        {
-            "final_response": reply,
-            "focus_context": focus_context,
-            "availability_result": availability_result,
-            "tool_results": {"query_availability": result},
-        },
-        reply,
-    )
+    update = {
+        "final_response": reply,
+        "focus_context": focus_context,
+        "availability_result": availability_result,
+        "tool_results": {"query_availability": result},
+    }
+    route_reason = (state.get("route_decision") or {}).get("reason")
+    if route_reason == "prepare_candidates_for_recommendation" and result.get("success"):
+        update["final_response"] = None
+        return update
+    return append_assistant_message(update, reply)
 
 
 def _availability_options(criteria: dict | None, technician_names: list[str]) -> list[dict]:

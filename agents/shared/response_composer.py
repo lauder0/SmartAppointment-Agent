@@ -32,6 +32,8 @@ RESPONSE_POLICY: Dict[str, str] = {
     "booking_guard_technician_unavailable": "template_required",
     "booking_success": "template_required",
     "booking_failed": "llm_optional",
+    "technician_recommendation": "llm_optional",
+    "technician_recommendation_failed": "template_required",
     "greeting": "template_required",
     "courtesy": "template_required",
     "unsupported": "template_required",
@@ -136,6 +138,8 @@ class ResponseComposer:
     def _default_agent(self, response_type: str) -> str:
         if response_type.startswith("booking_"):
             return "预约机器人"
+        if response_type.startswith("technician_recommendation"):
+            return "推荐机器人"
         if response_type in {"greeting", "courtesy", "unsupported", "clarification"}:
             return "咨询机器人"
         return "咨询机器人"
@@ -213,6 +217,11 @@ template:
             if names and not any(str(name) in body for name in names[:5]):
                 return False
         elif response_type == "booking_recommendation":
+            recommended = facts.get("recommended_technician") or {}
+            name = recommended.get("name") or recommended.get("technician_name")
+            if name:
+                required.append(str(name))
+        elif response_type == "technician_recommendation":
             recommended = facts.get("recommended_technician") or {}
             name = recommended.get("name") or recommended.get("technician_name")
             if name:
@@ -345,6 +354,8 @@ _TEMPLATES: Dict[str, Callable[[ResponseFacts, ResponseFacts], str]] = {
     "booking_guard_technician_unavailable": booking_guard_technician_unavailable_body,
     "booking_success": booking_success_body,
     "booking_failed": raw_body,
+    "technician_recommendation": raw_body,
+    "technician_recommendation_failed": raw_body,
     "greeting": greeting_body,
     "courtesy": courtesy_body,
     "unsupported": unsupported_body,

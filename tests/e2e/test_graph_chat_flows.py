@@ -61,10 +61,10 @@ async def test_availability_query_flow_persists_result(monkeypatch, graph_memory
 
     assert result["route_decision"]["action"] == "query_availability"
     assert "李娜" in result["final_response"]
-    assert result["availability_result"]["available_technician_names"] == ["李娜"]
+    assert result["availability"]["available_technician_names"] == ["李娜"]
 
     stored = await graph_chat_handler.get_graph_session_state("e2e-availability")
-    assert stored["availability_result"]["available_technician_names"] == ["李娜"]
+    assert stored["availability"]["available_technician_names"] == ["李娜"]
 
 
 @pytest.mark.asyncio

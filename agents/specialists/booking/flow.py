@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from .nodes import (
+    accept_recommendation,
     ask_confirmation,
     ask_missing_slots,
     clarify_booking,
@@ -24,6 +25,8 @@ async def run_booking_flow(action: str | None, state: Dict[str, Any]) -> Dict[st
         return await run_slot_filling_flow(state)
     if action in {"confirm_booking", "cancel_booking"}:
         return await run_confirmation_flow(state)
+    if action == "select_recommended_technician":
+        return await run_recommendation_selection_flow(state)
     return await clarify_booking(state)
 
 
@@ -57,3 +60,11 @@ async def run_confirmation_flow(state: Dict[str, Any]) -> Dict[str, Any]:
         state = await record_behavior(state)
         return await complete_booking(state)
     return await fail_booking(state)
+
+
+async def run_recommendation_selection_flow(state: Dict[str, Any]) -> Dict[str, Any]:
+    state = await accept_recommendation(state)
+    booking = state.get("booking") or {}
+    if booking.get("missing_fields"):
+        return await ask_missing_slots(state)
+    return await ask_confirmation(state)

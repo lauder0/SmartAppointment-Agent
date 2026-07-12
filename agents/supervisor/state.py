@@ -91,6 +91,11 @@ def default_recommendation_state() -> Dict[str, Any]:
         "recalled_preferences": {},
         "candidate_recommendations": [],
         "selected_recommendation": None,
+        "alternative_recommendations": [],
+        "preference": None,
+        "recommendation_reason": None,
+        "confidence": None,
+        "excluded_technician_ids": [],
         "trigger_reason": None,
     }
 
@@ -132,6 +137,7 @@ def state_for_agent_actions(state: SupervisorState) -> Dict[str, Any]:
             "last_answer": (state.get("availability") or {}).get("last_answer"),
         },
         "booking": dict(state.get("booking") or default_booking_state()),
+        "recommendation": dict(state.get("recommendation") or default_recommendation_state()),
         "route_decision": state.get("route_decision"),
         "last_completed_booking": state.get("last_completed_booking"),
         "final_response": state.get("final_response"),
@@ -160,6 +166,8 @@ def merge_agent_action_update(state: SupervisorState, update: Dict[str, Any]) ->
         merged["availability"] = availability
     if "booking" in update:
         merged["booking"] = update["booking"]
+    if "recommendation" in update:
+        merged["recommendation"] = update["recommendation"]
     if "route_decision" in update:
         merged["route_decision"] = update["route_decision"]
     if "last_completed_booking" in update:

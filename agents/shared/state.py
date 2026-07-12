@@ -17,6 +17,7 @@ class AgentState(TypedDict, total=False):
     focus_context: Dict[str, Any]
     availability_result: Dict[str, Any]
     booking: Dict[str, Any]
+    recommendation: Dict[str, Any]
     route_decision: Optional[Dict[str, Any]]
     last_completed_booking: Optional[Dict[str, Any]]
     final_response: Optional[str]
@@ -70,6 +71,7 @@ def ensure_state_defaults(state: AgentState) -> AgentState:
     state.setdefault("focus_context", default_focus_context())
     state.setdefault("availability_result", default_availability_result())
     state.setdefault("booking", default_booking_state())
+    state.setdefault("recommendation", {})
     state.setdefault("route_decision", None)
     state.setdefault("tool_results", {})
     state.setdefault("last_completed_booking", None)

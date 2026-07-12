@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from agents.specialists.booking.behavior_actions import behavior_recorder_node
 from agents.specialists.booking.actions import (
+    booking_accept_recommendation_node,
     booking_complete_node,
     booking_confirmation_node,
     booking_confirmation_prompt_node,
@@ -30,6 +31,10 @@ async def ask_missing_slots(state: Dict[str, Any]) -> Dict[str, Any]:
 
 async def match_slot(state: Dict[str, Any]) -> Dict[str, Any]:
     return apply_update(state, await booking_match_node(state))
+
+
+async def accept_recommendation(state: Dict[str, Any]) -> Dict[str, Any]:
+    return apply_update(state, await booking_accept_recommendation_node(state))
 
 
 async def ask_confirmation(state: Dict[str, Any]) -> Dict[str, Any]:

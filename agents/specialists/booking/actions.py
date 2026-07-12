@@ -345,6 +345,86 @@ async def booking_match_node(state: AgentState) -> AgentState:
     }
 
 
+async def booking_accept_recommendation_node(state: AgentState) -> AgentState:
+    """Transfer an accepted recommendation into the booking draft."""
+    state = ensure_state_defaults(state)
+    booking = dict(state.get("booking") or default_booking_state())
+    recommendation = dict(state.get("recommendation") or {})
+    selected = recommendation.get("selected_recommendation") or {}
+    criteria = (state.get("availability_result") or {}).get("criteria_snapshot") or {}
+
+    technician_id = selected.get("technician_id")
+    technician_name = selected.get("technician_name")
+    if not technician_id or not technician_name:
+        booking["status"] = "drafting"
+        booking["missing_fields"] = ["technician_id"]
+        reply = composer.reply(
+            "booking_failed",
+            {"body": "当前没有可接受的推荐技师，请先让我重新推荐一位。"},
+        )
+        return append_assistant_message(
+            {
+                "booking": booking,
+                "final_response": reply,
+            },
+            reply,
+        )
+
+    draft = dict(booking.get("draft") or {})
+    field_mapping = {
+        "start_time": "start_time",
+        "duration_minutes": "duration_minutes",
+        "service_type": "service_type",
+        "gender": "gender_preference",
+        "preference": "preference",
+    }
+    for source, target in field_mapping.items():
+        value = selected.get(source)
+        if value in (None, "", "未知", []):
+            value = criteria.get(source)
+        if value not in (None, "", "未知", []):
+            draft[target] = value
+
+    draft["technician_id"] = technician_id
+    draft["technician_name"] = technician_name
+    booking.update(
+        {
+            "status": "matched",
+            "draft": draft,
+            "missing_fields": _draft_missing_fields(draft),
+            "selected_option": {
+                "technician_id": technician_id,
+                "technician_name": technician_name,
+                "raw": selected,
+            },
+            "match_type": "selected_recommendation",
+            "match_result": {
+                "recommended_technician": {
+                    "id": technician_id,
+                    "name": technician_name,
+                    "gender": selected.get("gender"),
+                    "strength": selected.get("strength"),
+                }
+            },
+            "guard_result": None,
+        }
+    )
+    recommendation["status"] = "selected"
+    focus_context = merge_focus_context(
+        state.get("focus_context"),
+        focus_updates_from_booking_draft(draft),
+    )
+    return {
+        "focus_context": focus_context,
+        "booking": booking,
+        "recommendation": recommendation,
+        "tool_results": {
+            **(state.get("tool_results") or {}),
+            "accepted_recommendation": selected,
+        },
+    }
+
+
 async def booking_confirmation_prompt_node(state: AgentState) -> AgentState:
     """Render the booking confirmation prompt."""
     state = ensure_state_defaults(state)

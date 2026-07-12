@@ -52,7 +52,7 @@ class LangGraphApiTests(unittest.IsolatedAsyncioTestCase):
 
         mocked.assert_awaited_once()
         self.assertEqual(response.data["reply"], "[REPLY]ok")
-        self.assertEqual(response.data["agent"], "appointment")
+        self.assertEqual(response.data["agent"], "booking")
 
     async def test_consultation_api_uses_langgraph(self):
         request = ConsultationRequest(user_id="u1", question="What services do you offer?")

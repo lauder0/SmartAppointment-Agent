@@ -52,9 +52,15 @@ def _agent_for_action(action: str | None) -> str:
         return "consultation"
     if action == "query_availability":
         return "availability"
-    if action in {"generate_recommendation", "answer_recommendation"}:
+    if action in {"generate_recommendation", "answer_recommendation", "replace_recommendation"}:
         return "recommendation"
-    if action in {"start_or_continue_booking", "modify_booking", "confirm_booking", "cancel_booking"}:
+    if action in {
+        "start_or_continue_booking",
+        "modify_booking",
+        "confirm_booking",
+        "cancel_booking",
+        "select_recommended_technician",
+    }:
         return "booking"
     return "fallback"
 
@@ -62,9 +68,9 @@ def _agent_for_action(action: str | None) -> str:
 def _task_for_action(action: str | None) -> str | None:
     if action in {"answer_knowledge", "query_availability", "start_or_continue_booking", "modify_booking"}:
         return action
-    if action in {"generate_recommendation", "answer_recommendation"}:
+    if action in {"generate_recommendation", "answer_recommendation", "replace_recommendation"}:
         return "recommendation"
-    if action in {"confirm_booking", "cancel_booking"}:
+    if action in {"confirm_booking", "cancel_booking", "select_recommended_technician"}:
         return "booking_confirmation"
     return None
 

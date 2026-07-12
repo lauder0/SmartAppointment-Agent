@@ -17,6 +17,9 @@ from agents.shared.context.rules import (
     is_modification_request,
     is_negative_confirmation,
     is_positive_confirmation,
+    is_recommendation_replacement_request,
+    is_recommendation_request,
+    is_recommendation_selection,
     is_service_selection_after_catalog,
 )
 from agents.shared.node_utils import last_user_text
@@ -31,6 +34,9 @@ ROUTER_ACTIONS = {
     "modify_booking",
     "confirm_booking",
     "cancel_booking",
+    "generate_recommendation",
+    "replace_recommendation",
+    "select_recommended_technician",
     "ask_clarification",
     "unsupported",
 }
@@ -38,6 +44,7 @@ ROUTER_ACTIONS = {
 
 def _has_availability_context(state: AgentState) -> bool:
     availability_result = state.get("availability_result") or {}
+    recommendation = state.get("recommendation") or {}
     return bool(
         availability_result.get("criteria_snapshot")
         or availability_result.get("options")
@@ -71,6 +78,7 @@ def _recent_dialogue(state: AgentState, max_messages: int = 6) -> str:
 
 def _compact_state_summary(state: AgentState) -> str:
     booking = state.get("booking") or {}
+    recommendation = state.get("recommendation") or {}
     focus = state.get("focus_context") or {}
     availability_result = state.get("availability_result") or {}
     availability_names = availability_result.get("available_technician_names") or []
@@ -82,6 +90,8 @@ def _compact_state_summary(state: AgentState) -> str:
         "focus_context": focus,
         "availability_criteria": availability_result.get("criteria_snapshot"),
         "available_technician_names": availability_names[:8],
+        "recommendation_status": recommendation.get("status"),
+        "selected_recommendation": recommendation.get("selected_recommendation"),
     }
     return json.dumps(summary, ensure_ascii=False, default=str)
 
@@ -133,6 +143,9 @@ async def _llm_route_decision(state: AgentState, user_text: str) -> Optional[Dic
 - query_availability：查询或继续筛选技师实时排班、空闲时段、可约技师。
 - start_or_continue_booking：开始预约、继续补充预约信息，或从排班结果转预约。
 - modify_booking：用户正在修改一个待确认预约。
+- generate_recommendation：根据当前可约技师和用户偏好推荐技师。
+- replace_recommendation：用户不满意当前推荐，希望换一位。
+- select_recommended_technician：用户接受当前推荐，进入预约确认。
 - confirm_booking：用户明确确认待确认预约。注意只有当前状态已经等待确认时才可选择。
 - cancel_booking：用户明确取消待确认预约或预约草稿。
 - ask_clarification：用户意图不明确，需要追问。
@@ -175,6 +188,8 @@ async def main_router_node(state: AgentState) -> AgentState:
     state = ensure_state_defaults(state)
     user_text = last_user_text(state)
     status = _booking_status(state)
+    recommendation = state.get("recommendation") or {}
+    recommendation_status = recommendation.get("status") or "idle"
 
     decision = {
         "action": "unsupported",
@@ -200,8 +215,20 @@ async def main_router_node(state: AgentState) -> AgentState:
             decision = {"action": "answer_knowledge", "reason": "knowledge_interrupt_during_booking"}
         else:
             decision = {"action": "start_or_continue_booking", "reason": "continue_booking_draft"}
+    elif recommendation_status == "awaiting_selection":
+        if is_recommendation_replacement_request(user_text):
+            decision = {"action": "replace_recommendation", "reason": "replace_current_recommendation"}
+        elif is_recommendation_selection(user_text):
+            decision = {
+                "action": "select_recommended_technician",
+                "reason": "accept_current_recommendation",
+            }
+        elif is_recommendation_request(user_text) or is_availability_refinement(user_text):
+            decision = {"action": "generate_recommendation", "reason": "refine_recommendation"}
     elif _has_availability_context(state):
-        if is_formal_booking_request(user_text):
+        if is_recommendation_request(user_text):
+            decision = {"action": "generate_recommendation", "reason": "recommend_from_available_options"}
+        elif is_formal_booking_request(user_text):
             decision = {"action": "start_or_continue_booking", "reason": "handoff_availability_to_booking"}
         elif _should_handoff_service_selection_to_booking(state, user_text):
             decision = {"action": "start_or_continue_booking", "reason": "service_selection_after_availability"}
@@ -211,15 +238,18 @@ async def main_router_node(state: AgentState) -> AgentState:
         decision = {"action": "start_or_continue_booking", "reason": "service_catalog_selection"}
 
     if decision["action"] == "unsupported":
-        rule_intent = classify_rule_intent(user_text)
-        if rule_intent == "knowledge_query":
-            decision = {"action": "answer_knowledge", "reason": "rule_knowledge_query"}
-        elif rule_intent == "availability_query":
-            decision = {"action": "query_availability", "reason": "rule_availability_query"}
-        elif rule_intent == "appointment":
-            decision = {"action": "start_or_continue_booking", "reason": "rule_booking_request"}
-        elif rule_intent in {"greeting", "courtesy", "other"}:
-            decision = {"action": "unsupported", "reason": f"rule_{rule_intent}"}
+        if is_recommendation_request(user_text):
+            decision = {"action": "query_availability", "reason": "prepare_candidates_for_recommendation"}
+        else:
+            rule_intent = classify_rule_intent(user_text)
+            if rule_intent == "knowledge_query":
+                decision = {"action": "answer_knowledge", "reason": "rule_knowledge_query"}
+            elif rule_intent == "availability_query":
+                decision = {"action": "query_availability", "reason": "rule_availability_query"}
+            elif rule_intent == "appointment":
+                decision = {"action": "start_or_continue_booking", "reason": "rule_booking_request"}
+            elif rule_intent in {"greeting", "courtesy", "other"}:
+                decision = {"action": "unsupported", "reason": f"rule_{rule_intent}"}
 
     if decision["action"] == "unsupported" and classify_rule_intent(user_text) is None:
         llm_decision = await _llm_route_decision(state, user_text)

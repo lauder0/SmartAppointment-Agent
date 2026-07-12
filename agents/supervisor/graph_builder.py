@@ -15,7 +15,7 @@ from agents.supervisor.nodes import (
     supervisor_entry_node,
     supervisor_router_node,
 )
-from agents.supervisor.routing import route_supervisor_decision
+from agents.supervisor.routing import route_after_availability, route_supervisor_decision
 from agents.supervisor.state import SupervisorState
 
 
@@ -46,7 +46,14 @@ def build_smart_appointment_supervisor_graph():
     )
 
     builder.add_edge("consultation_subgraph", END)
-    builder.add_edge("availability_subgraph", END)
+    builder.add_conditional_edges(
+        "availability_subgraph",
+        route_after_availability,
+        {
+            "recommendation": "recommendation_subgraph",
+            "end": END,
+        },
+    )
     builder.add_edge("booking_subgraph", END)
     builder.add_edge("recommendation_subgraph", END)
     builder.add_edge("fallback_subgraph", END)

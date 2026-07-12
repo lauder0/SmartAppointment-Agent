@@ -139,6 +139,74 @@ def is_availability_refinement(text: str) -> bool:
     return AvailabilityService().is_availability_follow_up(text)
 
 
+def is_recommendation_request(text: str) -> bool:
+    normalized = _compact_text(text)
+    recommendation_phrases = (
+        "推荐一个",
+        "推荐一位",
+        "帮我推荐",
+        "你帮我选",
+        "帮我选一个",
+        "哪个更合适",
+        "哪位更合适",
+        "哪个好",
+        "选哪个好",
+        "你看着选",
+        "随便推荐",
+    )
+    preference_signals = (
+        "力气大",
+        "手劲大",
+        "重一点",
+        "轻一点",
+        "温柔一点",
+        "舒缓一点",
+        "按得深",
+        "按透",
+    )
+    return any(phrase in normalized for phrase in recommendation_phrases) or (
+        any(signal in normalized for signal in preference_signals)
+        and any(word in normalized for word in ("推荐", "选", "技师", "师傅"))
+    )
+
+
+def is_recommendation_replacement_request(text: str) -> bool:
+    normalized = _compact_text(text)
+    return any(
+        phrase in normalized
+        for phrase in (
+            "换一个",
+            "换一位",
+            "换个推荐",
+            "再推荐一个",
+            "还有别的吗",
+            "下一个",
+            "不要这个",
+        )
+    )
+
+
+def is_recommendation_selection(text: str) -> bool:
+    normalized = _compact_text(text)
+    return is_positive_confirmation(text) or normalized in {
+        "就他",
+        "就他吧",
+        "就她",
+        "就她吧",
+        "就这位",
+        "就这位吧",
+        "选他",
+        "选他吧",
+        "选她",
+        "选她吧",
+        "第一个",
+        "第一位",
+        "就第一个",
+        "就第一位",
+        "确认选择",
+    }
+
+
 def is_service_selection_after_catalog(text: str) -> bool:
     service_type = AvailabilityService.parse_service_type(text)
     return bool(service_type and any(keyword in text for keyword in SERVICE_SELECTION_KEYWORDS))
