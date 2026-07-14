@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from config.time_utils import business_now_naive
 from services.preference_recall_service import PreferenceRecallService
 from services.recommendation_service import RecommendationService
 from services.appointment_service import AppointmentService
@@ -44,7 +44,7 @@ async def get_user_analysis(user_id: str = "default_user") -> UserAnalysisRespon
 
         last_visit = _latest_appointment_time(appointments)
         days_since_last = (
-            (datetime.utcnow() - last_visit.replace(tzinfo=None)).days
+            (business_now_naive() - last_visit.replace(tzinfo=None)).days
             if last_visit
             else None
         )

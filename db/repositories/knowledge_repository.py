@@ -1,5 +1,7 @@
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+
+from config.time_utils import utc_now_naive
+
 from ..base.interfaces import BaseKnowledgeRepository
 from ..base.session_manager import SessionManager
 from ..models import KnowledgeDocument
@@ -120,7 +122,7 @@ class KnowledgeRepository(BaseKnowledgeRepository):
             if embedding is not None:
                 document.embedding = embedding
             
-            document.updated_at = datetime.utcnow()
+            document.updated_at = utc_now_naive()
             return True
 
     def delete_document(self, doc_id: int, soft_delete: bool = True) -> bool:
@@ -144,7 +146,7 @@ class KnowledgeRepository(BaseKnowledgeRepository):
             
             if soft_delete:
                 document.is_active = 0
-                document.updated_at = datetime.utcnow()
+                document.updated_at = utc_now_naive()
             else:
                 session.delete(document)
             

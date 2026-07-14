@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from agents.specialists.booking.parser import InputParser
 from agents.specialists.booking.message_builder import MessageBuilder
-from agents.shared.context.rules import (
+from agents.understanding.rules import (
     is_negative_confirmation,
     is_positive_confirmation,
     is_technician_replacement_request,
@@ -26,6 +26,7 @@ from agents.shared.node_utils import (
     reset_active_booking_update,
 )
 from agents.shared.response_composer import composer
+from agents.shared.slot_utils import default_duration_for_service
 from agents.shared.state import AgentState, default_booking_state, ensure_state_defaults
 from config.model_provider import create_chat_model
 from config.time_config import time_config
@@ -106,6 +107,18 @@ def _apply_recalled_preferences(
         draft["technician_name"] = recalled["preferred_technician_name"]
 
 
+def _apply_service_slot_defaults(draft: Dict[str, Any], booking: Dict[str, Any]) -> None:
+    if draft.get("duration_minutes"):
+        return
+    default_duration = default_duration_for_service(draft.get("service_type"))
+    if not default_duration:
+        return
+    draft["duration_minutes"] = default_duration
+    slot_sources = dict(booking.get("slot_sources") or {})
+    slot_sources["duration_minutes"] = "service_catalog_default"
+    booking["slot_sources"] = slot_sources
+
+
 def _has_time_expression(text: str) -> bool:
     lowered = text.lower()
     if re.search(r"(力气|手劲|力度|用力|按|轻|重|大|小|温柔|舒服).{0,6}一点", text):
@@ -159,6 +172,38 @@ def _normalize_selected_option(raw: Dict[str, Any] | None) -> Dict[str, Any] | N
         "technician_name": name,
         "raw": raw,
     }
+
+
+def _selected_recommendation_for_booking(
+    recommendation: Dict[str, Any],
+    slot_updates: Dict[str, Any],
+) -> Dict[str, Any]:
+    requested_name = slot_updates.get("technician_name")
+    if requested_name:
+        for candidate in _recommendation_candidates(recommendation):
+            if candidate.get("technician_name") == requested_name:
+                return candidate
+    return dict(recommendation.get("selected_recommendation") or {})
+
+
+def _recommendation_candidates(recommendation: Dict[str, Any]) -> list[Dict[str, Any]]:
+    candidates: list[Dict[str, Any]] = []
+    for item in (
+        recommendation.get("selected_recommendation"),
+        *(recommendation.get("candidate_recommendations") or []),
+        *(recommendation.get("alternative_recommendations") or []),
+    ):
+        if isinstance(item, dict):
+            candidates.append(item)
+    return candidates
+
+
+def _first_non_empty(container: Dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        value = container.get(key)
+        if value not in (None, "", "未知", []):
+            return value
+    return None
 
 
 def _selected_technician_id(booking: Dict[str, Any]) -> Any:
@@ -255,6 +300,7 @@ async def booking_parse_node(state: AgentState) -> AgentState:
         recalled_preferences,
         include_technician=not replace_technician,
     )
+    _apply_service_slot_defaults(draft, booking)
 
     missing = _draft_missing_fields(draft)
     focus_context = merge_focus_context(
@@ -350,8 +396,12 @@ async def booking_accept_recommendation_node(state: AgentState) -> AgentState:
     state = ensure_state_defaults(state)
     booking = dict(state.get("booking") or default_booking_state())
     recommendation = dict(state.get("recommendation") or {})
-    selected = recommendation.get("selected_recommendation") or {}
+    selected = _selected_recommendation_for_booking(
+        recommendation,
+        (state.get("route_decision") or {}).get("slot_updates") or {},
+    )
     criteria = (state.get("availability_result") or {}).get("criteria_snapshot") or {}
+    focus_context = state.get("focus_context") or {}
 
     technician_id = selected.get("technician_id")
     technician_name = selected.get("technician_name")
@@ -372,16 +422,18 @@ async def booking_accept_recommendation_node(state: AgentState) -> AgentState:
 
     draft = dict(booking.get("draft") or {})
     field_mapping = {
-        "start_time": "start_time",
-        "duration_minutes": "duration_minutes",
-        "service_type": "service_type",
-        "gender": "gender_preference",
-        "preference": "preference",
+        "start_time": ("start_time", ("start_time",), ("start_time",)),
+        "duration_minutes": ("duration_minutes", ("duration_minutes",), ("duration_minutes",)),
+        "service_type": ("service_type", ("service_type",), ("service_type",)),
+        "gender_preference": ("gender", ("gender", "gender_preference"), ("gender_preference",)),
+        "preference": ("preference", ("preference",), ("preference",)),
     }
-    for source, target in field_mapping.items():
-        value = selected.get(source)
+    for target, (selected_key, criteria_keys, focus_keys) in field_mapping.items():
+        value = selected.get(selected_key)
         if value in (None, "", "未知", []):
-            value = criteria.get(source)
+            value = _first_non_empty(criteria, criteria_keys)
+        if value in (None, "", "未知", []):
+            value = _first_non_empty(focus_context, focus_keys)
         if value not in (None, "", "未知", []):
             draft[target] = value
 
@@ -410,8 +462,9 @@ async def booking_accept_recommendation_node(state: AgentState) -> AgentState:
         }
     )
     recommendation["status"] = "selected"
+    recommendation["selected_recommendation"] = selected
     focus_context = merge_focus_context(
-        state.get("focus_context"),
+        focus_context,
         focus_updates_from_booking_draft(draft),
     )
     return {

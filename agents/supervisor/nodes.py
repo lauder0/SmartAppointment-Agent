@@ -21,6 +21,7 @@ async def supervisor_entry_node(state: SupervisorState) -> SupervisorState:
         "availability": state.get("availability"),
         "booking": state.get("booking"),
         "recommendation": state.get("recommendation"),
+        "task_frame": state.get("task_frame"),
         "route_decision": None,
         "handoff_payload": {},
         "last_agent_result": state.get("last_agent_result"),
@@ -40,9 +41,62 @@ async def supervisor_router_node(state: SupervisorState) -> SupervisorState:
         "route_decision": decision,
         "active_agent": target_agent,
         "active_task": _task_for_action(action),
+        "shared_focus_context": router_update.get("focus_context", state.get("shared_focus_context")),
+        "task_frame": router_update.get("task_frame", state.get("task_frame")),
         "tool_results": {
             **(state.get("tool_results") or {}),
+            **(router_update.get("tool_results") or {}),
             "supervisor_router": decision,
+        },
+    }
+
+
+async def supervisor_continue_node(state: SupervisorState) -> SupervisorState:
+    """Promote a stored continuation into the next executable route decision."""
+    state = ensure_supervisor_defaults(state)
+    current_decision = state.get("route_decision") or {}
+    continuation = current_decision.get("continuation") or {}
+    if not continuation:
+        return {
+            "route_decision": current_decision,
+            "active_agent": _agent_for_action(current_decision.get("action")),
+            "active_task": _task_for_action(current_decision.get("action")),
+        }
+
+    pending_responses = list(
+        ((state.get("tool_results") or {}).get("query_first_intermediate_responses") or [])
+    )
+    if state.get("final_response"):
+        pending_responses.append(state["final_response"])
+
+    next_decision = {
+        **current_decision,
+        "action": continuation.get("action") or "unsupported",
+        "reason": continuation.get("reason") or "query_first_continuation",
+        "source": "supervisor_continue",
+        "task_type": continuation.get("task_type") or current_decision.get("task_type") or "",
+        "primary_intent": continuation.get("primary_intent") or current_decision.get("primary_intent") or "",
+        "secondary_intents": continuation.get("secondary_intents")
+        or current_decision.get("secondary_intents")
+        or [],
+        "execution_policy": "query_first_continuation",
+        "continuation": continuation.get("continuation"),
+        "trace": {
+            **(current_decision.get("trace") or {}),
+            "continued_from_action": current_decision.get("action"),
+            "continued_from_reason": current_decision.get("reason"),
+            "pending_intermediate_response_count": len(pending_responses),
+        },
+    }
+    return {
+        "route_decision": next_decision,
+        "active_agent": _agent_for_action(next_decision.get("action")),
+        "active_task": _task_for_action(next_decision.get("action")),
+        "final_response": None,
+        "tool_results": {
+            **(state.get("tool_results") or {}),
+            "query_first_intermediate_responses": pending_responses,
+            "supervisor_continue": next_decision,
         },
     }
 

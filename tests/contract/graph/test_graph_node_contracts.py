@@ -14,11 +14,53 @@ from agents.specialists.booking.actions import (
     booking_confirmation_prompt_node,
     booking_missing_node,
 )
+from agents.specialists.consultation.actions import knowledge_consult_node
 from agents.supervisor.router_actions import main_router_node
 from config.time_config import time_config
 
 
 class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
+    async def test_service_catalog_short_question_returns_catalog_without_llm(self):
+        result = await knowledge_consult_node(
+            {
+                "messages": [HumanMessage(content="你们有什么项目")],
+                "focus_context": {},
+            }
+        )
+
+        self.assertIn("全身推拿", result["final_response"])
+        self.assertIn("肩颈推拿", result["final_response"])
+        self.assertEqual(result["focus_context"]["last_offer"], "service_catalog")
+
+    async def test_service_recommendation_updates_focus_context(self):
+        class FakeSearchKnowledge:
+            async def ainvoke(self, _payload):
+                return {"success": True, "data": {"documents": []}}
+
+        class FakeResponseGenerator:
+            def __init__(self, _model):
+                pass
+
+            async def generate_response(self, _user_input, _docs):
+                return "针对腰酸背痛，推荐【背部推拿】，时长40分钟。"
+
+        with (
+            patch("agents.specialists.consultation.actions.search_knowledge", FakeSearchKnowledge()),
+            patch("agents.specialists.consultation.actions.ResponseGenerator", FakeResponseGenerator),
+            patch("agents.specialists.consultation.actions.create_chat_model", lambda temperature=0.3: object()),
+        ):
+            result = await knowledge_consult_node(
+                {
+                    "messages": [HumanMessage(content="我腰酸背痛，你有什么推荐的项目吗")],
+                    "focus_context": {},
+                    "route_decision": {"task_type": "service_recommendation"},
+                }
+            )
+
+        self.assertEqual(result["focus_context"]["service_type"], "背部推拿")
+        self.assertEqual(result["focus_context"]["duration_minutes"], 40)
+        self.assertEqual(result["focus_context"]["last_offer"], "service_recommendation")
+
     async def test_pending_booking_replace_technician_excludes_current_choice(self):
         class FakeParser:
             def __init__(self, model):
@@ -120,6 +162,46 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["booking"]["missing_fields"], ["start_time", "duration", "gender"])
         self.assertIn("[预约机器人]", result["final_response"])
         self.assertIn("messages", result)
+
+    async def test_booking_parse_applies_catalog_default_duration(self):
+        class FakeParser:
+            def __init__(self, model):
+                pass
+
+            def parse_stream(self, user_input, history):
+                return ["{}"]
+
+            def parse_data(self, content):
+                return {
+                    "start_time": "未知",
+                    "duration": "未知",
+                    "project": "全身推拿",
+                    "gender": "女",
+                    "preference": "未知",
+                    "technician_name": "未知",
+                }
+
+        class FakeRecall:
+            def recall(self, user_id):
+                return {}
+
+        state = {
+            "messages": [HumanMessage(content="我想做全身推拿，女技师")],
+            "booking": {"status": "idle", "draft": {}},
+        }
+
+        with (
+            patch("agents.specialists.booking.actions.InputParser", FakeParser),
+            patch("agents.specialists.booking.actions.create_chat_model", lambda temperature=0: object()),
+            patch("agents.specialists.booking.actions.PreferenceRecallService", lambda: FakeRecall()),
+        ):
+            result = await booking_parse_node(state)
+
+        draft = result["booking"]["draft"]
+        self.assertEqual(draft["service_type"], "全身推拿")
+        self.assertEqual(draft["duration_minutes"], 60)
+        self.assertNotIn("duration", result["booking"]["missing_fields"])
+        self.assertEqual(result["booking"]["slot_sources"]["duration_minutes"], "service_catalog_default")
 
     async def test_booking_confirmation_prompt_moves_to_awaiting_confirmation(self):
         state = {

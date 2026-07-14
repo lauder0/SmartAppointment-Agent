@@ -7,6 +7,8 @@ from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
+from agents.understanding.schemas import default_task_frame
+
 
 class AgentState(TypedDict, total=False):
     """State passed between graph nodes."""
@@ -18,6 +20,7 @@ class AgentState(TypedDict, total=False):
     availability_result: Dict[str, Any]
     booking: Dict[str, Any]
     recommendation: Dict[str, Any]
+    task_frame: Dict[str, Any]
     route_decision: Optional[Dict[str, Any]]
     last_completed_booking: Optional[Dict[str, Any]]
     final_response: Optional[str]
@@ -72,6 +75,7 @@ def ensure_state_defaults(state: AgentState) -> AgentState:
     state.setdefault("availability_result", default_availability_result())
     state.setdefault("booking", default_booking_state())
     state.setdefault("recommendation", {})
+    state.setdefault("task_frame", default_task_frame())
     state.setdefault("route_decision", None)
     state.setdefault("tool_results", {})
     state.setdefault("last_completed_booking", None)

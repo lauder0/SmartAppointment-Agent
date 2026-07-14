@@ -60,6 +60,9 @@ def test_create_appointment_tool_is_idempotent(tmp_db_url, monkeypatch):
 
     assert first["success"] is True
     assert second["success"] is True
+    assert first["data"]["created"] is True
+    assert second["data"]["created"] is False
+    assert second["data"]["reason"] == "idempotent_replay"
     assert len(appointments) == 1
     assert len(schedules) == 1
 
@@ -96,3 +99,4 @@ def test_create_appointment_tool_blocks_overlap(tmp_db_url, monkeypatch):
 
     assert first["success"] is True
     assert second["success"] is False
+    assert second["error"] in {"appointment_conflict", "schedule_conflict"}

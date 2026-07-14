@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.graph.message import add_messages
+
+from agents.understanding.schemas import default_task_frame
 
 
 class SupervisorState(TypedDict, total=False):
@@ -29,6 +31,7 @@ class SupervisorState(TypedDict, total=False):
     availability: Dict[str, Any]
     booking: Dict[str, Any]
     recommendation: Dict[str, Any]
+    task_frame: Dict[str, Any]
 
     route_decision: Optional[Dict[str, Any]]
     handoff_payload: Dict[str, Any]
@@ -110,6 +113,7 @@ def ensure_supervisor_defaults(state: SupervisorState) -> SupervisorState:
     state.setdefault("availability", default_availability_state())
     state.setdefault("booking", default_booking_state())
     state.setdefault("recommendation", default_recommendation_state())
+    state.setdefault("task_frame", default_task_frame())
     state.setdefault("route_decision", None)
     state.setdefault("handoff_payload", {})
     state.setdefault("last_agent_result", None)
@@ -138,6 +142,7 @@ def state_for_agent_actions(state: SupervisorState) -> Dict[str, Any]:
         },
         "booking": dict(state.get("booking") or default_booking_state()),
         "recommendation": dict(state.get("recommendation") or default_recommendation_state()),
+        "task_frame": dict(state.get("task_frame") or default_task_frame()),
         "route_decision": state.get("route_decision"),
         "last_completed_booking": state.get("last_completed_booking"),
         "final_response": state.get("final_response"),
@@ -149,6 +154,12 @@ def state_for_agent_actions(state: SupervisorState) -> Dict[str, Any]:
 def merge_agent_action_update(state: SupervisorState, update: Dict[str, Any]) -> SupervisorState:
     """Merge a specialist action update into the 3.0 supervisor state shape."""
     merged: SupervisorState = {}
+    pending_responses = list(
+        ((state.get("tool_results") or {}).get("query_first_intermediate_responses") or [])
+    )
+    merged_final_response = update.get("final_response")
+    if merged_final_response and pending_responses:
+        merged_final_response = "\n\n".join([*pending_responses, merged_final_response])
     if "focus_context" in update:
         merged["shared_focus_context"] = update["focus_context"]
     if "availability_result" in update:
@@ -168,16 +179,27 @@ def merge_agent_action_update(state: SupervisorState, update: Dict[str, Any]) ->
         merged["booking"] = update["booking"]
     if "recommendation" in update:
         merged["recommendation"] = update["recommendation"]
+    if "task_frame" in update:
+        merged["task_frame"] = update["task_frame"]
     if "route_decision" in update:
         merged["route_decision"] = update["route_decision"]
     if "last_completed_booking" in update:
         merged["last_completed_booking"] = update["last_completed_booking"]
     if "final_response" in update:
-        merged["final_response"] = update["final_response"]
+        merged["final_response"] = merged_final_response
     if "error" in update:
         merged["error"] = update["error"]
     if "tool_results" in update:
         merged["tool_results"] = update["tool_results"]
+    if pending_responses and merged_final_response:
+        merged["tool_results"] = {
+            **(state.get("tool_results") or {}),
+            **(merged.get("tool_results") or {}),
+            "query_first_intermediate_responses": [],
+        }
     if "messages" in update:
-        merged["messages"] = update["messages"]
+        if pending_responses and merged_final_response:
+            merged["messages"] = [AIMessage(content=merged_final_response)]
+        else:
+            merged["messages"] = update["messages"]
     return merged

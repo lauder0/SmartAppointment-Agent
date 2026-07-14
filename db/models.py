@@ -1,8 +1,7 @@
-from datetime import datetime
-
 from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, JSON, String, Text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship
+
+from config.time_utils import utc_now_naive
 
 
 Base = declarative_base()
@@ -45,8 +44,8 @@ class Service(Base):
     default_duration_minutes = Column(Integer, nullable=False)
     price_cents = Column(Integer, nullable=False)
     is_active = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
     appointments = relationship("Appointment", back_populates="service")
 
 
@@ -70,8 +69,8 @@ class Appointment(Base):
     source = Column(String, nullable=False, default="chat")
     notes = Column(Text, nullable=True)
     idempotency_key = Column(String, nullable=True, unique=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
     cancelled_at = Column(DateTime, nullable=True)
     cancel_reason = Column(Text, nullable=True)
     technician = relationship("Technician", back_populates="appointments")
@@ -94,7 +93,7 @@ class TechnicianUnavailable(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     reason = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
     technician = relationship("Technician")
 
     __table_args__ = (
@@ -110,8 +109,8 @@ class KnowledgeDocument(Base):
     category = Column(String, nullable=False)
     keywords = Column(JSON, nullable=True)
     embedding = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
     is_active = Column(Integer, default=1)
 
 
@@ -124,7 +123,7 @@ class UserBehavior(Base):
     action_data = Column(JSON, nullable=True)
     technician_id = Column(Integer, ForeignKey("technicians.id"), nullable=True)
     session_id = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
     technician = relationship("Technician")
 
 
@@ -136,7 +135,7 @@ class UserPreference(Base):
     preference_type = Column(String, nullable=False)
     preference_value = Column(String, nullable=False)
     confidence_score = Column(Integer, default=1)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_updated = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
 
 class UserRecommendation(Base):
@@ -153,6 +152,6 @@ class UserRecommendation(Base):
     trigger_reason = Column(Text, nullable=True)
     expires_at = Column(DateTime, nullable=True)
     is_sent = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
     sent_at = Column(DateTime, nullable=True)
     technician = relationship("Technician")

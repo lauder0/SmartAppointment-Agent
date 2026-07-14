@@ -41,6 +41,28 @@ class AppointmentService:
         user_id: str = "default_user",
         idempotency_key: Optional[str] = None,
     ) -> bool:
+        return bool(
+            self.save_appointment_result(
+                technician_id=technician_id,
+                start_time=start_time,
+                end_time=end_time,
+                appointment_history=appointment_history,
+                session_id=session_id,
+                user_id=user_id,
+                idempotency_key=idempotency_key,
+            ).get("success")
+        )
+
+    def save_appointment_result(
+        self,
+        technician_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        appointment_history: Dict[str, Any],
+        session_id: str,
+        user_id: str = "default_user",
+        idempotency_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
         try:
             technician_id_int = int(technician_id)
             appointment_no = f"APPT{int(time.time() * 1000)}{uuid.uuid4().hex[:6].upper()}"
@@ -72,7 +94,7 @@ class AppointmentService:
                     end_time,
                     result.get("reason"),
                 )
-                return False
+                return result
 
             logger.info(
                 "Appointment saved: technician_id=%s, start=%s, end=%s, appointment_id=%s, created=%s",
@@ -82,10 +104,10 @@ class AppointmentService:
                 result.get("appointment_id"),
                 result.get("created"),
             )
-            return True
+            return result
         except Exception as e:
             logger.error("Failed to save appointment: %s", e)
-            return False
+            return {"success": False, "created": False, "reason": "service_exception", "error": str(e)}
 
     def get_user_appointments(self, user_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         try:

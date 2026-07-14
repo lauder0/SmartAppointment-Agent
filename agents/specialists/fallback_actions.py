@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agents.shared.context.rules import (
+from agents.understanding.rules import (
     is_courtesy,
     is_greeting,
 )

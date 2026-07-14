@@ -20,6 +20,8 @@ async def availability_query_node(state: AgentState) -> AgentState:
     base_criteria = None
     if state.get("availability_result"):
         base_criteria = state["availability_result"].get("criteria_snapshot")
+    if not base_criteria:
+        base_criteria = _base_criteria_from_focus_context(state.get("focus_context"))
 
     result = query_availability.invoke({"text": user_input, "base_criteria": base_criteria})
     if result.get("success"):
@@ -61,10 +63,25 @@ async def availability_query_node(state: AgentState) -> AgentState:
         "tool_results": {"query_availability": result},
     }
     route_reason = (state.get("route_decision") or {}).get("reason")
-    if route_reason == "prepare_candidates_for_recommendation" and result.get("success"):
+    options = (availability_result or {}).get("options") or []
+    if route_reason == "prepare_candidates_for_recommendation" and result.get("success") and options:
         update["final_response"] = None
         return update
     return append_assistant_message(update, reply)
+
+
+def _base_criteria_from_focus_context(focus_context: dict | None) -> dict | None:
+    focus_context = focus_context or {}
+    base = {
+        "service_type": focus_context.get("service_type"),
+        "start_time": focus_context.get("start_time"),
+        "duration_minutes": focus_context.get("duration_minutes"),
+        "gender": focus_context.get("gender_preference"),
+        "technician_name": focus_context.get("technician_name"),
+        "preference": focus_context.get("preference"),
+    }
+    base = {key: value for key, value in base.items() if value not in (None, "", [], {})}
+    return base or None
 
 
 def _availability_options(criteria: dict | None, technician_names: list[str]) -> list[dict]:

@@ -15,6 +15,7 @@ from agents.supervisor.state import (
     default_recommendation_state,
     default_shared_focus_context,
 )
+from agents.understanding.schemas import default_task_frame
 from services.session_state_store import SessionStateStore, create_session_state_store
 
 _graph = None
@@ -48,6 +49,7 @@ def _initial_state(session_id: str, user_id: str = "default_user") -> Supervisor
         "availability": default_availability_state(),
         "booking": default_booking_state(),
         "recommendation": default_recommendation_state(),
+        "task_frame": default_task_frame(),
         "route_decision": None,
         "handoff_payload": {},
         "last_agent_result": None,

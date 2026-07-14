@@ -163,3 +163,55 @@ def test_accepting_recommendation_enters_booking_confirmation():
     assert result["booking"]["status"] == "awaiting_confirmation"
     assert result["booking"]["selected_option"]["technician_name"] == "张伟"
     assert "请问是否确认预约" in result["final_response"]
+
+
+def test_accepting_named_candidate_overrides_current_recommendation():
+    state = {
+        "session_id": "accept-named-candidate",
+        "user_id": "u1",
+        "messages": [HumanMessage(content="我选王强吧")],
+        "focus_context": {
+            "service_type": "背部推拿",
+            "start_time": "2026-07-11 15:00",
+            "duration_minutes": 40,
+        },
+        "availability_result": {
+            "criteria_snapshot": {
+                "start_time": "2026-07-11 15:00",
+            },
+            "options": [],
+        },
+        "booking": default_booking_state(),
+        "recommendation": {
+            **default_recommendation_state(),
+            "status": "awaiting_selection",
+            "selected_recommendation": {
+                "technician_id": 2,
+                "technician_name": "李娜",
+            },
+            "candidate_recommendations": [
+                {
+                    "technician_id": 2,
+                    "technician_name": "李娜",
+                },
+                {
+                    "technician_id": 1,
+                    "technician_name": "王强",
+                },
+            ],
+        },
+        "route_decision": {
+            "action": "select_recommended_technician",
+            "slot_updates": {"technician_name": "王强"},
+        },
+        "tool_results": {},
+    }
+
+    result = asyncio.run(run_booking_flow("select_recommended_technician", state))
+
+    draft = result["booking"]["draft"]
+    assert result["booking"]["status"] == "awaiting_confirmation"
+    assert result["booking"]["selected_option"]["technician_name"] == "王强"
+    assert draft["service_type"] == "背部推拿"
+    assert draft["duration_minutes"] == 40
+    assert "请问是否确认预约" in result["final_response"]

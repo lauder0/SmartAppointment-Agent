@@ -145,6 +145,27 @@ The supervisor router emits one action from this set:
 
 Routing is deliberately conservative around side effects. Booking creation only happens after Booking has an awaiting-confirmation state, receives positive confirmation, passes the booking guard, and then calls the transaction creation action.
 
+## Intent Understanding And Task Modeling
+
+3.0 now separates user understanding from graph routing. The Supervisor Router is a thin adapter over `agents/understanding`, which produces both a graph-compatible `route_decision` and a persistent `task_frame`.
+
+```text
+Input Normalizer
+  -> Rule Signal Collector
+  -> Context Resolver
+  -> Task Modeler
+  -> LLM Planner Fallback
+  -> Decision Arbiter
+```
+
+Important behavior:
+
+- Rule handling collects multiple signals first, instead of routing on the first matched rule.
+- Composite intents such as service selection plus technician recommendation become `recommendation_before_booking`.
+- Context-dependent confirmations are resolved against current state, so a pending booking confirmation remains guarded.
+- `task_frame` tracks task type, primary intent, secondary intents, collected slots, missing slots, subtasks, conflicts, invalidations, safety flags, risk level, and next action.
+- `route_decision` keeps the existing graph action contract while carrying richer task metadata for observability and evals.
+
 ## Business Action Organization
 
 The supervisor delegates to specialist agents, and each specialist owns its internal control flow.

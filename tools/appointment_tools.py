@@ -54,7 +54,7 @@ def create_appointment(
             "preference": preference or "",
         }
         service = AppointmentService()
-        success = service.save_appointment(
+        save_result = service.save_appointment_result(
             technician_id=str(technician_id),
             start_time=start_dt,
             end_time=end_dt,
@@ -63,6 +63,15 @@ def create_appointment(
             user_id=user_id or "default_user",
             idempotency_key=idempotency_key,
         )
+        success = bool(save_result.get("success"))
+        created = save_result.get("created")
+        reason = save_result.get("reason")
+        if success and created is False:
+            message = "预约已存在，已复用上次创建结果"
+        elif success:
+            message = "预约创建成功"
+        else:
+            message = "预约创建失败，可能存在时间冲突"
         return tool_result(
             success,
             data={
@@ -75,8 +84,13 @@ def create_appointment(
                 "gender_preference": gender_preference,
                 "preference": preference,
                 "idempotency_key": idempotency_key,
+                "created": created,
+                "reason": reason,
+                "appointment_id": save_result.get("appointment_id"),
+                "appointment_no": save_result.get("appointment_no"),
             },
-            message="预约创建成功" if success else "预约创建失败，可能存在时间冲突",
+            message=message,
+            error=None if success else reason,
         )
     except Exception as e:
         return tool_result(False, message="预约创建失败", error=str(e))

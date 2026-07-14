@@ -1,1 +1,1 @@
-"""Shared state, rules, and response helpers for specialist agents."""
+"""Shared state, response, and node helpers for specialist agents."""

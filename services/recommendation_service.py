@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+from config.time_utils import business_now_naive, utc_now_naive
 from db.db_router import DatabaseRouter
 from services.appointment_preference_service import AppointmentPreferenceService
 from services.appointment_service import AppointmentService
@@ -58,7 +59,7 @@ class RecommendationService:
         if not isinstance(last_visit, datetime):
             return []
 
-        days_since_last = (datetime.utcnow() - last_visit.replace(tzinfo=None)).days
+        days_since_last = (business_now_naive() - last_visit.replace(tzinfo=None)).days
         interval = self._preferred_interval_days(profile)
         if days_since_last < interval:
             return []
@@ -100,7 +101,7 @@ class RecommendationService:
             status="generated",
             dedupe_key=dedupe_key,
             trigger_reason="preferred_interval_reached",
-            expires_at=datetime.utcnow() + timedelta(days=7),
+            expires_at=utc_now_naive() + timedelta(days=7),
         )
         return [
             {
@@ -235,7 +236,7 @@ class RecommendationService:
         profile = self.preference_service.recall(user_id)
         last_visit = profile.get("last_appointment_at")
         days_since_last = (
-            (datetime.utcnow() - last_visit.replace(tzinfo=None)).days
+            (business_now_naive() - last_visit.replace(tzinfo=None)).days
             if isinstance(last_visit, datetime)
             else 0
         )

@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from config.time_utils import business_now_naive, utc_now_naive
+
 from ..base.session_manager import SessionManager
 from ..models import Appointment, Service, Technician, TechnicianSchedule, TechnicianUnavailable
 
@@ -27,7 +29,7 @@ class AppointmentRepository:
                 existing.default_duration_minutes = default_duration_minutes
                 existing.price_cents = price_cents
                 existing.is_active = 1
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = utc_now_naive()
                 return existing.id
 
             service = Service(
@@ -253,7 +255,7 @@ class AppointmentRepository:
             if days_back:
                 from datetime import timedelta
 
-                cutoff_date = datetime.utcnow() - timedelta(days=days_back)
+                cutoff_date = business_now_naive() - timedelta(days=days_back)
                 query = query.filter(Appointment.start_time >= cutoff_date)
             return [row[0] for row in query.all() if row[0]]
 

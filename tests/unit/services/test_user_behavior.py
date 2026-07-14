@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime, timedelta
 
+from config.time_utils import business_now_naive
 from services.preference_recall_service import PreferenceRecallService
 from services.recommendation_service import RecommendationService
 from services.user_behavior_service import UserBehaviorService
@@ -87,8 +88,8 @@ def test_recommendation_generation_uses_appointment_history(tmp_path):
     db_url = _db_url(tmp_path)
     appointment_service = AppointmentService(db_url)
     technician_id = appointment_service.add_technician("Alice", gender="female", strength="relaxing")
-    first = datetime.utcnow() - timedelta(days=40)
-    second = datetime.utcnow() - timedelta(days=20)
+    first = business_now_naive() - timedelta(days=40)
+    second = business_now_naive() - timedelta(days=20)
 
     for index, start_time in enumerate([first, second], start=1):
         appointment_service.save_appointment(
