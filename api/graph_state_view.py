@@ -1,8 +1,10 @@
-"""API-facing views derived from the 3.0 supervisor state."""
+﻿"""API-facing views derived from the 3.0 supervisor state."""
 
 from __future__ import annotations
 
 from typing import Any, Dict
+
+from agents.supervisor.planning.plan_schema import plan_summary
 
 
 def action_to_intent(action: str | None) -> str:
@@ -15,8 +17,11 @@ def action_to_intent(action: str | None) -> str:
         "modify_booking",
         "confirm_booking",
         "cancel_booking",
+        "select_recommended_technician",
     }:
         return "appointment"
+    if action in {"recommend_service", "generate_recommendation", "answer_recommendation", "replace_recommendation"}:
+        return "recommendation"
     return "other"
 
 
@@ -44,11 +49,14 @@ def action_to_agent(action: str | None, response: str | None = None) -> str:
         "modify_booking",
         "confirm_booking",
         "cancel_booking",
+        "select_recommended_technician",
     }:
         return "booking"
-    if response and "[棰勭害鏈哄櫒浜篯" in response:
+    if action in {"recommend_service", "generate_recommendation", "answer_recommendation", "replace_recommendation"}:
+        return "recommendation"
+    if response and "[妫板嫮瀹抽張鍝勬珤娴滅" in response:
         return "booking"
-    if response and "[鍜ㄨ鏈哄櫒浜篯" in response:
+    if response and "[閸溿劏顕楅張鍝勬珤娴滅" in response:
         return "consultation"
     return "fallback"
 
@@ -73,8 +81,11 @@ def state_view(state: Dict[str, Any]) -> Dict[str, Any]:
             "active_agent": state.get("active_agent"),
             "active_task": state.get("active_task"),
             "task_stack": state.get("task_stack", []),
-            "handoff_payload": state.get("handoff_payload", {}),
             "last_agent_result": state.get("last_agent_result"),
+            "turn_results": state.get("turn_results", []),
+            "turn_trace": state.get("turn_trace"),
+            "trace_history": state.get("trace_history", []),
+            "execution_plan": plan_summary(state.get("execution_plan")),
         },
         "route_decision": decision,
         "intent": state_to_intent(state),
@@ -87,4 +98,5 @@ def state_view(state: Dict[str, Any]) -> Dict[str, Any]:
         "booking": state.get("booking"),
         "recommendation": state.get("recommendation"),
         "last_completed_booking": state.get("last_completed_booking"),
+        "trace": state.get("turn_trace"),
     }

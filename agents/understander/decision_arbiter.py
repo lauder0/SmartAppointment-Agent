@@ -64,7 +64,6 @@ def build_route_decision(understanding: UnderstandingResult) -> RouteDecision:
         "safety_flags": understanding.get("safety_flags") or [],
         "risk_level": understanding.get("risk_level") or "low",
         "execution_policy": understanding.get("execution_policy") or "single_action",
-        "continuation": understanding.get("continuation"),
         "clarification_question": understanding.get("clarification_question"),
         "trace": understanding.get("trace") or {},
     }

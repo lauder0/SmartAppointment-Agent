@@ -149,8 +149,13 @@ APPOINTMENT_POLICY_QUESTION_KEYWORDS = [
     "取消规则",
     "能取消吗",
     "可以取消吗",
+    "可以取消",
+    "取消或者改时间",
+    "取消或改时间",
     "怎么改时间",
     "可以改时间吗",
+    "改时间吗",
+    "更改时间",
     "改期",
     "迟到",
 ]
@@ -161,6 +166,7 @@ SERVICE_DETAIL_QUESTION_KEYWORDS = [
     "注意事项",
     "禁忌",
     "功效",
+    "作用",
     "效果",
     "区别",
     "适合什么",
@@ -203,6 +209,8 @@ SERVICE_RECOMMENDATION_KEYWORDS = [
     "做什么项目好",
     "做什么服务好",
     "选什么项目",
+    "选什么",
+    "应该选什么",
     "选哪个项目",
     "哪个项目适合",
     "哪种项目适合",
@@ -211,6 +219,8 @@ SERVICE_RECOMMENDATION_KEYWORDS = [
     "不知道选哪个项目",
     "不知道选什么项目",
     "肩颈酸做什么",
+    "脖子酸",
+    "颈椎酸",
     "肩膀酸做什么",
     "腰酸背痛做什么",
     "想放松做什么",
@@ -480,7 +490,7 @@ def is_recommendation_request(text: str) -> bool:
     )
     return any(phrase in normalized for phrase in recommendation_phrases) or (
         any(signal in normalized for signal in preference_signals)
-        and any(word in normalized for word in ("推荐", "选", "技师", "师傅"))
+        and any(word in normalized for word in ("推荐", "选"))
     )
 
 

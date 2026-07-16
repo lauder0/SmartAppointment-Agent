@@ -1,8 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import pytest
 
-from agents.understanding.rules import (
+from agents.understander.rules import (
     classify_rule_matches,
     classify_rule_intent,
     is_appointment_policy_question,
@@ -15,11 +15,11 @@ from agents.understanding.rules import (
     is_service_recommendation_request,
     is_technician_info_question,
 )
-from agents.understanding.contextual_resolver import resolve_contextual_signals
-from agents.understanding.llm_planner import should_call_llm
-from agents.understanding.decision_builder import build_understanding_result
-from agents.understanding.normalizer import normalize_user_input
-from agents.understanding.rule_signals import collect_rule_signals
+from agents.understander.contextual_resolver import resolve_contextual_signals
+from agents.understander.llm_planner import should_call_llm
+from agents.understander.decision_builder import build_understanding_result
+from agents.understander.normalizer import normalize_user_input
+from agents.understander.rule_signals import collect_rule_signals
 
 
 @pytest.mark.parametrize(
@@ -54,10 +54,7 @@ def test_location_synonym_routes_to_knowledge_without_llm():
     context_signals = resolve_contextual_signals(signals, {})
 
     assert any(signal["name"] == "knowledge_query" for signal in context_signals)
-    assert any(
-        signal["intent_group"] == "static_consultation" and signal["subtype"] == "location"
-        for signal in context_signals
-    )
+    assert any(signal["intent_group"] == "static_consultation" and signal["subtype"] == "location" for signal in context_signals)
     assert should_call_llm(context_signals, text) is False
 
 
@@ -113,7 +110,7 @@ def test_service_recommendation_routes_to_consultation():
     result = build_understanding_result(text, normalized["normalized_text"], signals, {})
 
     assert is_service_recommendation_request(text) is True
-    assert result["next_action"] == "answer_knowledge"
+    assert result["next_action"] == "recommend_service"
     assert result["task_type"] == "service_recommendation"
     assert result["route_reason"] == "rule_service_recommendation"
 

@@ -15,6 +15,10 @@ from services.appointment_service import AppointmentService
 from .schemas import CreateAppointmentInput, tool_result
 
 
+def _tool_result(*args, **kwargs) -> dict:
+    return tool_result(*args, tool_name="create_appointment", **kwargs)
+
+
 @tool(args_schema=CreateAppointmentInput)
 def create_appointment(
     user_id: str,
@@ -31,11 +35,11 @@ def create_appointment(
     try:
         start_dt = time_config.parse_datetime(start_time)
         if start_dt is None:
-            return tool_result(False, message="预约开始时间格式无效", error="invalid_start_time")
+            return _tool_result(False, message="预约开始时间格式无效", error="invalid_start_time")
         end_dt = start_dt + timedelta(minutes=duration_minutes)
         valid_time, invalid_reason = time_config.validate_booking_time(start_dt, end_dt)
         if not valid_time:
-            return tool_result(
+            return _tool_result(
                 False,
                 data={
                     "start_time": time_config.format_datetime(start_dt),
@@ -72,7 +76,7 @@ def create_appointment(
             message = "预约创建成功"
         else:
             message = "预约创建失败，可能存在时间冲突"
-        return tool_result(
+        return _tool_result(
             success,
             data={
                 "user_id": user_id or "default_user",
@@ -93,4 +97,4 @@ def create_appointment(
             error=None if success else reason,
         )
     except Exception as e:
-        return tool_result(False, message="预约创建失败", error=str(e))
+        return _tool_result(False, message="预约创建失败", error=str(e))

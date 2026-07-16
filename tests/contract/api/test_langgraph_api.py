@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import unittest
 from datetime import timedelta
@@ -93,7 +93,8 @@ class LangGraphApiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["booking"]["status"], "drafting")
         self.assertFalse(result["tool_results"]["booking_guard"]["success"])
-        self.assertIn("不能直接创建", result["final_response"])
+        self.assertEqual(result["response_type"], "booking_guard_missing")
+        self.assertNotIn("final_response", result)
 
     async def test_booking_guard_allows_confirmed_available_booking(self):
         start_time = time_config.format_datetime(time_config.today().replace(hour=15, minute=0) + timedelta(days=1))
@@ -123,3 +124,5 @@ class LangGraphApiTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

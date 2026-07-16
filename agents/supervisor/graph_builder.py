@@ -16,7 +16,12 @@ from agents.supervisor.nodes import (
     supervisor_entry_node,
     supervisor_router_node,
 )
-from agents.supervisor.routing import route_after_availability, route_after_consultation, route_supervisor_decision
+from agents.supervisor.response_node import supervisor_response_node
+from agents.supervisor.orchestration.routing import (
+    route_after_agent_result,
+    route_after_supervisor_continue,
+    route_supervisor_decision,
+)
 from agents.supervisor.state import SupervisorState
 
 
@@ -27,6 +32,7 @@ def build_smart_appointment_supervisor_graph():
     builder.add_node("supervisor_entry", supervisor_entry_node)
     builder.add_node("supervisor_router", supervisor_router_node)
     builder.add_node("supervisor_continue", supervisor_continue_node)
+    builder.add_node("supervisor_response", supervisor_response_node)
     builder.add_node("consultation_subgraph", consultation_subgraph_node)
     builder.add_node("availability_subgraph", availability_subgraph_node)
     builder.add_node("booking_subgraph", booking_subgraph_node)
@@ -49,34 +55,56 @@ def build_smart_appointment_supervisor_graph():
 
     builder.add_conditional_edges(
         "consultation_subgraph",
-        route_after_consultation,
+        route_after_agent_result,
         {
             "continue": "supervisor_continue",
-            "end": END,
+            "end": "supervisor_response",
         },
     )
     builder.add_conditional_edges(
         "availability_subgraph",
-        route_after_availability,
+        route_after_agent_result,
         {
             "continue": "supervisor_continue",
-            "recommendation": "recommendation_subgraph",
-            "end": END,
+            "end": "supervisor_response",
         },
     )
     builder.add_conditional_edges(
         "supervisor_continue",
-        route_supervisor_decision,
+        route_after_supervisor_continue,
         {
             "consultation": "consultation_subgraph",
             "availability": "availability_subgraph",
             "booking": "booking_subgraph",
             "recommendation": "recommendation_subgraph",
             "fallback": "fallback_subgraph",
+            "response": "supervisor_response",
         },
     )
-    builder.add_edge("booking_subgraph", END)
-    builder.add_edge("recommendation_subgraph", END)
-    builder.add_edge("fallback_subgraph", END)
+    builder.add_conditional_edges(
+        "booking_subgraph",
+        route_after_agent_result,
+        {
+            "continue": "supervisor_continue",
+            "end": "supervisor_response",
+        },
+    )
+    builder.add_conditional_edges(
+        "recommendation_subgraph",
+        route_after_agent_result,
+        {
+            "continue": "supervisor_continue",
+            "end": "supervisor_response",
+        },
+    )
+    builder.add_conditional_edges(
+        "fallback_subgraph",
+        route_after_agent_result,
+        {
+            "continue": "supervisor_continue",
+            "end": "supervisor_response",
+        },
+    )
+    builder.add_edge("supervisor_response", END)
 
     return builder.compile()

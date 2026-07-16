@@ -87,6 +87,12 @@ class SessionStateStoreTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(first["final_response"], "message_count=1")
             self.assertEqual(second["final_response"], "message_count=2")
+            self.assertTrue(first["turn_trace"]["trace_id"].startswith("trace_"))
+            self.assertEqual(first["turn_trace"]["session_id"], "persist-s1")
+            self.assertEqual(first["turn_trace"]["user_input"], "第一轮")
+            self.assertGreaterEqual(first["turn_trace"]["latency_ms"], 0)
+            self.assertEqual(len(first["trace_history"]), 1)
+            self.assertEqual(len(second["trace_history"]), 2)
 
             await graph_chat_handler.reset_graph_session("persist-s1")
             reset_state = await graph_chat_handler.get_graph_session_state("persist-s1")

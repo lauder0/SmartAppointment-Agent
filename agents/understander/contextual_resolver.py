@@ -1,4 +1,4 @@
-"""Context-aware intent resolution for confirmations, continuations, and references."""
+"""Context-aware intent resolution for confirmations, pending tasks, and references."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ def resolve_contextual_signals(
     signals: List[IntentSignal],
     state: Dict[str, Any],
 ) -> List[IntentSignal]:
-    """Add context-specific signals such as pending task continuation."""
+    """Add context-specific signals such as pending task slot updates."""
     resolved = list(signals)
     names = {signal.get("name") for signal in signals}
     booking = state.get("booking") or {}
@@ -24,10 +24,10 @@ def resolve_contextual_signals(
             resolved.append(_signal("confirm_pending_booking", 0.99, "context"))
         elif "negative_confirmation" in names:
             resolved.append(_signal("cancel_pending_booking", 0.99, "context"))
-        elif "modification_request" in names or "slot_update" in names:
-            resolved.append(_signal("modify_pending_booking", 0.94, "context"))
         elif "knowledge_query" in names:
             resolved.append(_signal("knowledge_interrupt_pending_booking", 0.94, "context"))
+        elif "modification_request" in names or "slot_update" in names:
+            resolved.append(_signal("modify_pending_booking", 0.94, "context"))
 
     if recommendation.get("status") == "awaiting_selection":
         if "recommendation_replacement" in names:
@@ -52,13 +52,27 @@ def resolve_contextual_signals(
         if "recommendation_request" in names:
             resolved.append(_signal("recommend_from_available_options", 0.95, "context"))
         elif (
+            ("availability_refinement" in names or "slot_update" in names)
+            and "formal_booking_request" not in names
+            and "service_selection" not in names
+            and "service_selection_after_catalog" not in names
+        ):
+            resolved.append(
+                _signal(
+                    "continue_availability_query",
+                    0.94,
+                    "context",
+                    slots=merged_slots,
+                )
+            )
+        elif (
             "formal_booking_request" in names
             or (
                 ("service_selection" in names or "service_selection_after_catalog" in names)
                 and not merged_slots.get("duration_minutes")
             )
         ):
-            resolved.append(_signal("handoff_availability_to_booking", 0.94, "context"))
+            resolved.append(_signal("availability_to_booking_selection", 0.94, "context"))
 
     if task_frame.get("status") in {"collecting_slots", "awaiting_user"}:
         if "slot_update" in names:

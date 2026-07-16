@@ -1,4 +1,4 @@
-"""Booking specialist graph entrypoint."""
+﻿"""Booking specialist graph entrypoint."""
 
 from __future__ import annotations
 
@@ -7,10 +7,11 @@ from agents.supervisor.state import (
     merge_agent_action_update,
     state_for_agent_actions,
 )
-from agents.specialists.common import agent_result
+from agents.specialists.result_contract import attach_agent_result
 
 from .flow import run_booking_flow
-from .state import booking_result_type, normalize_booking_state
+from .result_contract import build_booking_result_contract, booking_contract_to_specialist_result
+from .state import normalize_booking_state
 
 
 async def booking_subgraph_node(state: SupervisorState) -> SupervisorState:
@@ -20,13 +21,14 @@ async def booking_subgraph_node(state: SupervisorState) -> SupervisorState:
 
     merged = merge_agent_action_update(state, aggregate)
     booking = normalize_booking_state(merged.get("booking") or state.get("booking"))
-    result_type = booking_result_type(booking, merged)
     merged["booking"] = booking
-    merged["last_agent_result"] = agent_result(
-        "booking",
-        booking.get("status", "unknown"),
-        result_type,
-        merged.get("final_response"),
-        {"booking": booking},
+    contract = build_booking_result_contract(
+        action=action,
+        booking=booking,
+        aggregate=aggregate,
+        merged_state=merged,
     )
+    result = booking_contract_to_specialist_result(contract)
+    attach_agent_result(merged, state, result)
     return merged
+

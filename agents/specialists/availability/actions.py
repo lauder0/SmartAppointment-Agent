@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from agents.shared.node_utils import (
-    append_assistant_message,
     focus_updates_from_availability_criteria,
     last_user_text,
     merge_focus_context,
 )
-from agents.shared.response_composer import composer
 from agents.shared.state import AgentState
 from tools.availability_tools import query_availability
 from services.appointment_service import AppointmentService
@@ -26,15 +24,12 @@ async def availability_query_node(state: AgentState) -> AgentState:
     result = query_availability.invoke({"text": user_input, "base_criteria": base_criteria})
     if result.get("success"):
         data = result.get("data", {})
-        reply = await composer.areply(
-            "availability_result",
-            {
-                "body": data.get("answer") or "已完成实时排班查询。",
-                "criteria": data.get("criteria") or {},
-                "available_technician_names": data.get("available_technician_names", []),
-            },
-            {"user_input": user_input},
-        )
+        response_type = "availability_result"
+        response_facts = {
+            "body": data.get("answer") or "已完成实时排班查询。",
+            "criteria": data.get("criteria") or {},
+            "available_technician_names": data.get("available_technician_names", []),
+        }
         criteria = data.get("criteria")
         available_names = data.get("available_technician_names", [])
         focus_context = merge_focus_context(
@@ -46,28 +41,22 @@ async def availability_query_node(state: AgentState) -> AgentState:
             "criteria_snapshot": criteria,
             "options": options,
             "available_technician_names": available_names,
-            "last_answer": reply,
+            "last_answer": response_facts["body"],
         }
     else:
-        reply = composer.reply(
-            "availability_failed",
-            {"body": f"抱歉，实时排班查询失败：{result.get('error') or result.get('message')}"},
-        )
+        response_type = "availability_failed"
+        response_facts = {"body": f"抱歉，实时排班查询失败：{result.get('error') or result.get('message')}"}
         focus_context = state.get("focus_context")
         availability_result = state.get("availability_result")
 
     update = {
-        "final_response": reply,
+        "response_type": response_type,
+        "response_facts": response_facts,
         "focus_context": focus_context,
         "availability_result": availability_result,
         "tool_results": {"query_availability": result},
     }
-    route_reason = (state.get("route_decision") or {}).get("reason")
-    options = (availability_result or {}).get("options") or []
-    if route_reason == "prepare_candidates_for_recommendation" and result.get("success") and options:
-        update["final_response"] = None
-        return update
-    return append_assistant_message(update, reply)
+    return update
 
 
 def _base_criteria_from_focus_context(focus_context: dict | None) -> dict | None:
@@ -86,11 +75,11 @@ def _base_criteria_from_focus_context(focus_context: dict | None) -> dict | None
 
 def _availability_options(criteria: dict | None, technician_names: list[str]) -> list[dict]:
     criteria = criteria or {}
-    technicians_by_name = {
-        tech.get("name"): tech
-        for tech in AppointmentService().get_all_technicians()
-        if tech.get("name")
-    }
+    try:
+        technicians = AppointmentService().get_all_technicians()
+    except Exception:
+        technicians = []
+    technicians_by_name = {tech.get("name"): tech for tech in technicians if tech.get("name")}
     options = []
     for index, name in enumerate(technician_names, start=1):
         tech = technicians_by_name.get(name) or {}

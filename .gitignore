@@ -3,7 +3,13 @@
 .env.*
 !.env.example
 
-# Python bytecode and caches
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache and build output
 __pycache__/
 *.py[cod]
 *$py.class
@@ -13,14 +19,11 @@ __pycache__/
 .coverage
 .coverage.*
 htmlcov/
+build/
+dist/
+*.egg-info/
 
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-
-# Local databases and runtime data
+# Local databases and runtime state
 data/*
 !data/.gitkeep
 *.db
@@ -29,19 +32,13 @@ data/*
 *.sqlite
 *.sqlite3
 
-# Generated evaluation and application output
+# Logs and generated reports
 output/*
 !output/.gitkeep
 *.log
 
-# Packaging and build output
-build/
-dist/
-*.egg-info/
-
-# IDE and operating-system files
+# IDE and OS noise
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-

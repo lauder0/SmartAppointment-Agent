@@ -10,6 +10,10 @@ from langchain_core.tools import tool
 from .schemas import GetWeatherInput, tool_result
 
 
+def _tool_result(*args, **kwargs) -> dict:
+    return tool_result(*args, tool_name="get_weather", **kwargs)
+
+
 async def _get_weather_data(city: str = "Beijing") -> str:
     api_key = os.getenv("OPENWEATHER_API_KEY")
     if not api_key:
@@ -47,6 +51,6 @@ async def get_weather(city: str = "Beijing") -> dict:
     """Get current weather information for reminder and appointment-success messages."""
     try:
         result = await _get_weather_data(city)
-        return tool_result(True, data={"city": city, "weather": result}, message="weather query succeeded")
+        return _tool_result(True, data={"city": city, "weather": result}, message="weather query succeeded")
     except Exception as e:
-        return tool_result(False, data={"city": city}, message="weather query failed", error=str(e))
+        return _tool_result(False, data={"city": city}, message="weather query failed", error=str(e))

@@ -1,15 +1,14 @@
-"""Recommendation nodes that rank verified available technicians."""
+﻿"""Recommendation nodes that rank verified available technicians."""
 
 from __future__ import annotations
 
 from typing import Any, Dict
 
-from langchain_core.messages import AIMessage
-
-from agents.shared.node_utils import last_user_text
-from agents.shared.response_composer import composer
-from agents.specialists.common import agent_result
+from agents.shared.node_utils import last_user_text, merge_focus_context
+from agents.shared.slot_utils import default_duration_for_service
+from agents.specialists.result_contract import agent_result
 from agents.supervisor.state import SupervisorState, ensure_supervisor_defaults
+from services.service_recommendation_service import ServiceRecommendationService
 from services.technician_recommendation_service import (
     TechnicianRecommendationService,
     parse_recommendation_preference,
@@ -17,6 +16,89 @@ from services.technician_recommendation_service import (
 
 from .memory import recall_preferences
 from .state import normalize_recommendation_state
+
+
+async def recommend_service_node(state: SupervisorState) -> SupervisorState:
+    """Recommend a service item from symptoms, need, or preference."""
+    state = ensure_supervisor_defaults(state)
+    recommendation = normalize_recommendation_state(state.get("recommendation"))
+    focus = state.get("shared_focus_context") or {}
+    user_text = last_user_text(state)
+    result = ServiceRecommendationService().recommend(user_text, focus)
+    selected = result.get("selected") or {}
+    alternatives = list(result.get("alternatives") or [])
+
+    if not selected:
+        body = "我暂时没能判断最适合的服务项目。您可以告诉我主要想缓解哪里不舒服，或想放松、助眠、缓解肩颈/背部。"
+        recommendation.update({"status": "waiting_user", "trigger_reason": "service_recommendation_unclear"})
+        return {
+            "recommendation": recommendation,
+            "last_agent_result": agent_result(
+                "recommendation",
+                "waiting_user",
+                "service_recommendation_unclear",
+                None,
+                {"recommendation": recommendation},
+                response_type="service_recommendation",
+                facts={"body": body},
+                requires_user_input=True,
+                next_expected_user_action="provide_symptom_or_need",
+            ),
+        }
+
+    service_name = selected.get("name")
+    duration = selected.get("default_duration_minutes") or default_duration_for_service(service_name)
+    recommended_service = {
+        "name": service_name,
+        "service_type": service_name,
+        "description": selected.get("description"),
+        "duration_minutes": duration,
+        "price_yuan": selected.get("price_yuan"),
+        "matched_keywords": selected.get("matched_keywords") or [],
+    }
+    recommendation.update(
+        {
+            "status": "completed",
+            "selected_service_recommendation": recommended_service,
+            "alternative_service_recommendations": alternatives,
+            "recommendation_reason": _service_recommendation_reason(recommended_service),
+            "trigger_reason": "service_recommendation_requested",
+        }
+    )
+    focus_updates = {
+        "service_type": service_name,
+        "duration_minutes": duration,
+        "recommended_service": recommended_service,
+        "symptom_or_need": user_text,
+        "last_offer": "service_recommendation",
+    }
+    focus_context = merge_focus_context(focus, focus_updates, updated_by="recommendation")
+    body = _service_recommendation_body(recommended_service, alternatives)
+    return {
+        "shared_focus_context": focus_context,
+        "recommendation": recommendation,
+        "tool_results": {
+            **(state.get("tool_results") or {}),
+            "service_recommendation": result,
+        },
+        "last_agent_result": agent_result(
+            "recommendation",
+            "completed",
+            "service_recommended",
+            None,
+            {"recommendation": recommendation},
+            response_type="service_recommendation",
+            facts={
+                "body": body,
+                "recommended_service": recommended_service,
+                "alternative_services": alternatives,
+                "agent_label": "推荐机器人",
+            },
+            tool_results={"service_recommendation": result},
+            requires_user_input=True,
+            next_expected_user_action="provide_time_or_request_technician_recommendation",
+        ),
+    }
 
 
 async def recommend_technician_node(
@@ -30,22 +112,12 @@ async def recommend_technician_node(
     candidates = list(availability.get("options") or [])
 
     if not candidates:
-        reply = composer.reply(
-            "technician_recommendation_failed",
-            {
-                "body": (
-                    "我还没有可用于推荐的实时排班候选人。请先告诉我想预约的日期、时间和时长，"
-                    "我查到可约技师后再为您比较推荐。"
-                )
-            },
+        body = (
+            "我还没有可用于推荐的实时排班候选人。请先告诉我想预约的日期、时间和时长，"
+            "我查到可约技师后再为您比较推荐。"
         )
-        recommendation.update(
-            {
-                "status": "needs_availability",
-                "trigger_reason": "no_available_candidates",
-            }
-        )
-        return _result_update(recommendation, reply, "recommendation_needs_availability")
+        recommendation.update({"status": "needs_availability", "trigger_reason": "no_available_candidates"})
+        return _result_update(recommendation, body, "recommendation_needs_availability")
 
     excluded_ids = list(recommendation.get("excluded_technician_ids") or [])
     current = recommendation.get("selected_recommendation") or {}
@@ -63,10 +135,7 @@ async def recommend_technician_node(
     )
     preference = parse_recommendation_preference(current_text, fallback=fallback_preference)
     recalled = recall_preferences(state)
-    service_type = (
-        focus.get("service_type")
-        or (availability.get("criteria_snapshot") or {}).get("service_type")
-    )
+    service_type = focus.get("service_type") or (availability.get("criteria_snapshot") or {}).get("service_type")
 
     ranked = TechnicianRecommendationService().rank(
         candidate_options=candidates,
@@ -76,15 +145,7 @@ async def recommend_technician_node(
         excluded_technician_ids=excluded_ids,
     )
     if not ranked:
-        reply = composer.reply(
-            "technician_recommendation_failed",
-            {
-                "body": (
-                    "当前可约候选人已经比较完了，没有更多符合条件的技师。"
-                    "您可以调整时间、性别或手法偏好，我再重新查询。"
-                )
-            },
-        )
+        body = "当前可约候选人已经比较完了，没有更多符合条件的技师。您可以调整时间、性别或手法偏好，我再重新查询。"
         recommendation.update(
             {
                 "status": "exhausted",
@@ -92,7 +153,7 @@ async def recommend_technician_node(
                 "trigger_reason": "candidate_pool_exhausted",
             }
         )
-        return _result_update(recommendation, reply, "recommendation_exhausted")
+        return _result_update(recommendation, body, "recommendation_exhausted")
 
     selected = ranked[0]
     alternatives = ranked[1:3]
@@ -106,18 +167,14 @@ async def recommend_technician_node(
         criteria=availability.get("criteria_snapshot") or {},
         reason=reason,
     )
-    reply = await composer.areply(
-        "technician_recommendation",
-        {
-            "body": body,
-            "recommended_technician": selected,
-            "alternative_technicians": alternatives,
-            "criteria": availability.get("criteria_snapshot") or {},
-            "preference": preference,
-            "agent_label": "推荐机器人",
-        },
-        {"user_input": current_text},
-    )
+    response_facts = {
+        "body": body,
+        "recommended_technician": selected,
+        "alternative_technicians": alternatives,
+        "criteria": availability.get("criteria_snapshot") or {},
+        "preference": preference,
+        "agent_label": "推荐机器人",
+    }
     recommendation.update(
         {
             "status": "awaiting_selection",
@@ -134,8 +191,6 @@ async def recommend_technician_node(
     )
     return {
         "recommendation": recommendation,
-        "final_response": reply,
-        "messages": [AIMessage(content=reply)],
         "tool_results": {
             **(state.get("tool_results") or {}),
             "technician_recommendation": {
@@ -149,34 +204,70 @@ async def recommend_technician_node(
             "recommendation",
             "awaiting_selection",
             "technician_recommended",
-            reply,
+            None,
             {"recommendation": recommendation},
-            {
-                "target_agent": "booking",
-                "reason": "recommendation_ready_for_selection",
-                "payload": {"selected_recommendation": selected},
-            },
+            response_type="technician_recommendation",
+            facts=response_facts,
+            suggested_next_tasks=[
+                {
+                    "agent": "booking",
+                    "action": "select_recommended_technician",
+                    "reason": "recommendation_ready_for_selection",
+                    "input": {"selected_recommendation": selected},
+                    "auto_continue": False,
+                    "task_type": "booking_confirmation",
+                    "primary_intent": "select_recommended_technician",
+                }
+            ],
+            requires_user_input=True,
+            next_expected_user_action="accept_recommendation | choose_alternative | change_preference",
         ),
     }
 
 
-def _result_update(
-    recommendation: Dict[str, Any],
-    reply: str,
-    result_type: str,
-) -> SupervisorState:
+def _result_update(recommendation: Dict[str, Any], body: str, result_type: str) -> SupervisorState:
+    response_facts = {"body": body}
     return {
         "recommendation": recommendation,
-        "final_response": reply,
-        "messages": [AIMessage(content=reply)],
         "last_agent_result": agent_result(
             "recommendation",
             recommendation.get("status", "unknown"),
             result_type,
-            reply,
+            None,
             {"recommendation": recommendation},
+            response_type="technician_recommendation_failed",
+            facts=response_facts,
         ),
     }
+
+
+def _service_recommendation_reason(service: Dict[str, Any]) -> str:
+    matched = service.get("matched_keywords") or []
+    if matched:
+        return "、".join(str(item) for item in matched[:3])
+    description = service.get("description")
+    if description:
+        return str(description)
+    return "更贴合您当前描述的需求"
+
+
+def _service_recommendation_body(selected: Dict[str, Any], alternatives: list[Dict[str, Any]]) -> str:
+    name = selected.get("name") or selected.get("service_type")
+    duration = selected.get("duration_minutes")
+    price = selected.get("price_yuan")
+    reason = _service_recommendation_reason(selected)
+    parts = [f"针对您的需求，我更推荐{name}。"]
+    if duration:
+        parts.append(f"时长约 {duration} 分钟。")
+    if price:
+        parts.append(f"价格 {price} 元。")
+    parts.append(f"推荐理由：{reason}。")
+    if alternatives:
+        names = "、".join(str(item.get("name")) for item in alternatives if item.get("name"))
+        if names:
+            parts.append(f"备选项目可以考虑：{names}。")
+    parts.append("如果您想预约这个项目，可以继续告诉我时间；如果还想推荐技师，也可以直接说“帮我推荐技师”。")
+    return "".join(parts)
 
 
 def _recommendation_confidence(ranked: list[Dict[str, Any]]) -> float:
@@ -185,14 +276,10 @@ def _recommendation_confidence(ranked: list[Dict[str, Any]]) -> float:
     return round(min(1.0, max(0.0, top_score * 0.8 + max(0.0, margin) * 0.2)), 4)
 
 
-def _recommendation_reason(
-    selected: Dict[str, Any],
-    preference: Dict[str, Any],
-    service_type: str | None,
-) -> str:
+def _recommendation_reason(selected: Dict[str, Any], preference: Dict[str, Any], service_type: str | None) -> str:
     features = selected.get("matched_features") or []
     if features:
-        return "、".join(features[:3])
+        return "、".join(str(item) for item in features[:3])
     profile_label = preference.get("profile_label")
     if profile_label:
         return f"在当前可约候选中与“{profile_label}”偏好相对更接近"
@@ -223,10 +310,11 @@ def _recommendation_body(
         schedule += "。"
     alternative_text = ""
     if alternatives:
-        alternative_names = "、".join(str(item.get("technician_name")) for item in alternatives)
-        alternative_text = f"备选可以考虑：{alternative_names}。"
+        alternative_names = "、".join(str(item.get("technician_name")) for item in alternatives if item.get("technician_name"))
+        if alternative_names:
+            alternative_text = f"备选可以考虑：{alternative_names}。"
     service_text = f"服务项目按{service_type}考虑。" if service_type else ""
     return (
         f"{intro}{details}{schedule}{service_text}{alternative_text}"
-        "如果您接受这位推荐，请回复“就她/他吧”或“确认选择”；不满意可以说“换一个”。"
+        "如果您接受这位推荐，请回复“就好/他吧”或“确认选择”；不满意可以说“换一个”。"
     )

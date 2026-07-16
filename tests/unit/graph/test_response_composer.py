@@ -1,15 +1,15 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import pytest
 
-from agents.shared.response_composer import ResponseComposer
+from agents.response_writer.composer import ResponseComposer
 
 
 def test_booking_confirmation_keeps_required_fields():
     response = ResponseComposer().compose(
         "booking_confirmation",
         {
-            "time_line": "2026年06月11日 10:00-11:00",
+            "time_line": "2026年6月1日 10:00-11:00",
             "service_type": "全身推拿",
             "duration_minutes": 60,
             "technician_name": "李娜",
@@ -19,7 +19,7 @@ def test_booking_confirmation_keeps_required_fields():
     assert response.policy == "template_required"
     assert response.agent_label == "预约机器人"
     assert response.reply.startswith("[REPLY][预约机器人]")
-    assert "时间：2026年06月11日 10:00-11:00" in response.reply
+    assert "时间：2026年6月1日 10:00-11:00" in response.reply
     assert "项目：全身推拿" in response.reply
     assert "时长：60分钟" in response.reply
     assert "技师：李娜" in response.reply
@@ -65,7 +65,7 @@ async def test_low_risk_availability_result_uses_llm_when_facts_are_preserved(mo
             return FakeMessage()
 
     monkeypatch.setattr(
-        "agents.shared.response_composer.create_chat_model",
+        "agents.response_writer.composer.create_chat_model",
         lambda temperature=0.2: FakeModel(),
     )
 
@@ -93,7 +93,7 @@ async def test_low_risk_availability_result_falls_back_when_llm_drops_facts(monk
             return FakeMessage()
 
     monkeypatch.setattr(
-        "agents.shared.response_composer.create_chat_model",
+        "agents.response_writer.composer.create_chat_model",
         lambda temperature=0.2: FakeModel(),
     )
 

@@ -12,14 +12,36 @@ def tool_result(
     data: Any = None,
     message: str = "",
     error: str | None = None,
+    *,
+    tool_name: str | None = None,
+    metadata: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Return a consistent result envelope for tools."""
-    return {
+    result = {
         "success": success,
         "data": data,
         "message": message,
         "error": error,
     }
+    if tool_name or metadata:
+        result["metadata"] = _tool_metadata(tool_name, metadata)
+    return result
+
+
+def _tool_metadata(tool_name: str | None, overrides: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {"tool_name": tool_name} if tool_name else {}
+    if tool_name:
+        try:
+            from .registry import get_tool_metadata
+
+            registry_metadata = get_tool_metadata(tool_name) or {}
+        except Exception:
+            registry_metadata = {}
+        for key in ("permission", "risk_level", "idempotent", "retryable", "requires_confirmation"):
+            if key in registry_metadata:
+                metadata[key] = registry_metadata[key]
+    metadata.update(overrides or {})
+    return metadata
 
 
 class SearchKnowledgeInput(BaseModel):

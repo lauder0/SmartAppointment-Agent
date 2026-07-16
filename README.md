@@ -1,156 +1,155 @@
 # Smart Appointment AI Agent 3.0
 
-3.0 uses a **Supervisor + Specialist Agents** architecture. The supervisor owns intent routing and cross-agent handoff. Consultation, availability, booking, recommendation, and fallback each expose a graph entrypoint; the richer booking workflow is implemented as an internal deterministic flow over booking nodes.
-
-## Architecture
+这是一个面向门店预约场景的多 Agent 智能助手。当前 3.0 架构已经从单一 workflow 演进为：
 
 ```text
-User
-  -> Web/API Chat
-  -> Session State Store (memory by default, Redis optional)
-  -> Supervisor Graph
+用户输入
+  -> Web / API Chat
+  -> Session State Store（默认内存，可选 Redis）
+  -> Understander Agent（意图理解）
+  -> Supervisor Agent（计划、调度、完成判断）
       -> Consultation Agent
       -> Availability Agent
-          -> Recommendation Agent (only when availability was gathered for recommendation)
-      -> Booking Agent
       -> Recommendation Agent
-      -> Fallback Handler
-  -> Response
+      -> Booking Agent
+      -> Fallback Agent
+  -> Response Writer Agent
+  -> 最终回复
 ```
 
-## Core Ideas
+## 核心模块
 
-- `Supervisor`: routes user intent, owns cross-agent handoff, and tracks active agent/task.
-- `Consultation Agent`: answers services, prices, address, business hours, policies, and other knowledge questions.
-- `Availability Agent`: parses schedule constraints, returns realtime available technician options, and can feed those candidates into recommendation.
-- `Booking Agent`: owns booking draft, slot filling, matching, recommendation acceptance, confirmation, guard, creation, behavior recording, and completion.
-- `Recommendation Agent`: ranks verified available technicians, supports "change another one", and hands accepted recommendations back to Booking.
-- `Fallback Handler`: handles clarification, greeting, courtesy, and unsupported requests.
+- `agents/understander/`：意图理解 Agent，负责文本标准化、规则识别、上下文补全、低置信度 LLM fallback，并输出 `TaskFrame / RouteDecision`。
+- `agents/supervisor/`：Supervisor Agent，负责把理解结果转成 `ExecutionPlan`，按计划调用 Specialist，接收结构化结果，并决定继续、等待用户、完成或失败。
+- `agents/specialists/`：领域 Specialist Agents，目前包含咨询、排班、预约、推荐、兜底处理。
+- `agents/response_writer/`：最终回复生成 Agent，统一消费 `execution_plan`、`turn_results`、`shared_focus_context`，避免多个子 Agent 分散回复。
+- `agents/shared/`：跨 Agent 共享的状态、上下文、槽位和节点工具，不属于某个具体业务 Agent，但被多个 Agent 复用。
+- `tools/`：稳定业务工具边界，封装知识库、排班、预约、技师、用户行为等服务调用。
+- `services/` / `db/`：业务服务层和数据库访问层。
+- `web/` / `api/`：Web 页面与 FastAPI 接口入口。
 
-## State Model
-
-3.0 uses `SupervisorState`:
+## 当前目录结构
 
 ```text
-SupervisorState
-  - session_id / user_id / messages
-  - active_agent / active_task / task_stack
-  - shared_focus_context
-  - consultation
-  - availability
-  - booking
-  - recommendation
-  - route_decision
-  - handoff_payload
-  - last_agent_result
-  - last_completed_booking
-  - final_response / error
-  - tool_results
+Smart-Appointment/
+  app.py
+  agents/
+    understander/
+    supervisor/
+      planning/
+      orchestration/
+    specialists/
+      consultation/
+      availability/
+      booking/
+      recommendation/
+      fallback/
+    response_writer/
+    shared/
+  api/
+  config/
+  db/
+  services/
+  tools/
+  web/
+  tests/
+  data/
 ```
 
-Important ownership rules:
+## 状态模型
 
-- `shared_focus_context`: cross-agent facts such as service type, time, duration, gender preference, technician, and style preference.
-- `consultation`: private consultation state.
-- `availability`: private availability state, including query criteria, candidate options, available technician names, and answer text.
-- `booking`: private transaction state. Only Booking Agent can progress toward guarded appointment creation.
-- `recommendation`: private recommendation state, preference-recall boundary, ranked candidates, selected recommendation, alternatives, confidence, and excluded technician IDs.
+主链路使用 `SupervisorState` 保存会话状态，核心字段包括：
 
-## Runtime Details
+- `shared_focus_context`：跨 Agent 共享的关键上下文，例如服务项目、时间、时长、技师、性别偏好、手法偏好。
+- `task_frame`：当前轮次的结构化任务语义，由 Understander Agent 生成。
+- `execution_plan`：Supervisor 拥有的执行计划，记录当前任务、已完成任务、等待用户状态和完成原因。
+- `turn_results`：当前轮次中各 Specialist 的结构化结果链。query-first 多步骤回复会从这里统一组合。
+- `consultation` / `availability` / `booking` / `recommendation`：各领域 Agent 私有状态。
+- `turn_trace` / `trace_history`：当前轮和历史轮次的可观测信息。
+- `final_response`：Response Writer 生成的最终用户回复。
 
-- Web routes call `api.chat_handler.ProcessUserInput_stream`, which delegates to the 3.0 supervisor workflow in `api.graph_chat_handler`.
-- A session is loaded, locked, updated with the latest `HumanMessage`, passed through the compiled LangGraph supervisor, then persisted.
-- `SESSION_BACKEND=memory` is the default local session store. `SESSION_BACKEND=redis` enables Redis-backed state with `REDIS_URL`, TTL, key prefix, and lock timeout environment variables.
-- `/chat` and `/chat/stream` both return streaming text responses. `/chat/reset` clears one stored session.
-- The FastAPI app registers API routers for appointment, consultation, task, knowledge, technician, and user behavior pages/APIs, plus the web UI routes.
+## 本地启动
 
-## Specialist Agent Layout
+当前仓库外层目录是 `2Smart-Appointment`，应用代码在内层 `Smart-Appointment`。请先进入应用目录：
+
+```powershell
+cd D:\graduate\wmluluResearch\3Agent\2Smart-Appointment\Smart-Appointment
+```
+
+如果项目里已经有 `.venv`，直接使用下面的最简启动命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+如果是第一次在新机器运行，先执行一次初始化：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+然后编辑 `.env`，至少配置可用的 LLM / Embedding key，再执行启动命令。
+
+服务启动后访问：
 
 ```text
-agents/
-  supervisor/
-    graph_builder.py
-    nodes.py
-    router_actions.py
-    routing.py
-    state.py
-  shared/
-    state.py
-    node_utils.py
-    response_composer.py
-    context/
-      rules.py
-  specialists/
-    consultation/
-      actions.py
-      graph.py
-      nodes.py
-      response_generator.py
-      state.py
-    availability/
-      actions.py
-      graph.py
-      nodes.py
-      state.py
-    booking/
-      actions.py
-      behavior_actions.py
-      graph.py
-      flow.py
-      message_builder.py
-      nodes.py
-      parser.py
-      state.py
-    recommendation/
-      graph.py
-      memory.py
-      nodes.py
-      state.py
-    fallback.py
-    fallback_actions.py
-    common.py
-tools/
-services/
-db/
-tests/
+Web 首页:     http://127.0.0.1:8000/
+API 文档:     http://127.0.0.1:8000/docs
+OpenAPI JSON: http://127.0.0.1:8000/openapi.json
 ```
 
-The 3.0 specialist agents now own their domain actions directly. Parsing, response generation, availability lookup, recommendation ranking, booking guards, and routing helpers live inside the relevant agent package, while `tools/` remains the stable callable boundary over business services. This keeps the graph readable today and leaves a clear path to future tool-calling agents.
-
-## Run
+也可以运行：
 
 ```powershell
-cd 3.0
-Copy-Item .env.example .env
-# Fill in the required API keys in .env
-
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-python -m uvicorn app:app --host 127.0.0.1 --port 8000 --reload
+.\.venv\Scripts\python.exe app.py
 ```
 
-Running `python app.py` starts Uvicorn on `127.0.0.1:8001`; the README command above uses port `8000` for reload-friendly local development.
+这种方式会使用 `app.py` 内置配置，服务地址是：
 
-The local `.env`, SQLite database, Python caches, and generated evaluation
-reports are ignored by Git. Do not commit real API keys. If a key has ever been
-shared or committed, revoke it before publishing the repository.
+```text
+http://127.0.0.1:8001/
+```
 
-## Test And Evaluation
+## 启动排查
+
+- 如果 PowerShell 提示 `python` 不存在，优先使用项目虚拟环境里的 `.\.venv\Scripts\python.exe`。
+- 如果提示 `unable to open database file`，请确认当前目录是内层 `Smart-Appointment`，并确认 `data/` 目录可写；SQLite 默认数据库路径是 `data/smart_appointment.db`。
+- 如果 `.env` 不存在，先从 `.env.example` 复制一份。
+- 如果 LLM 调用失败，检查 `.env` 中的 `MODEL_PROVIDER`、`LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`，以及 Embedding 相关配置。
+
+## 常用测试
 
 ```powershell
-python -m pytest tests\contract\supervisor -q
-python -m pytest tests\unit tests\contract -q
-python tests\evaluation\runners\run_eval.py --cases-file tests\evaluation\cases\supervisor_state_contract_cases.json
-python tests\evaluation\runners\run_eval.py
-python tests\evaluation\runners\run_rag_retrieval_eval.py --cases-file tests\evaluation\cases\rag_retrieval_cases.json
+.\.venv\Scripts\python.exe -m pytest tests\contract\supervisor -q
+.\.venv\Scripts\python.exe -m pytest tests\contract\graph -q
+.\.venv\Scripts\python.exe -m pytest tests\contract\api\test_langgraph_api.py -q
 ```
 
-## Current Boundaries
+如果 pytest 无法写入缓存或临时目录，可以指定临时目录：
 
-- The outer architecture is a true supervisor plus specialist-agent boundary.
-- Each business specialist now has its own state/nodes/graph package.
-- Stable business actions are now organized inside the owning agent package to preserve tested parsing, RAG, availability, matching, guard, and write behavior without an extra business-node layer.
-- Availability can flow directly into recommendation when the router labels the request as `prepare_candidates_for_recommendation` and candidate options exist.
-- Recommendation acceptance routes through `select_recommended_technician` into Booking rather than creating appointments itself.
-- `tools/` wraps service calls and reusable business operations so future LLM tool-calling can reuse the same interface.
-- Recommendation is active for user-requested ranking/replacement over verified availability candidates, but it still does not proactively take over unrelated chat.
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\unit tests\contract -q --basetemp=$env:TEMP\sa_pytest_base
+```
+
+## LLM 开关
+
+默认本地链路尽量保持确定性，以下 LLM 增强能力默认关闭：
+
+```text
+ENABLE_SUPERVISOR_LLM_PLANNER=false
+ENABLE_SUPERVISOR_LLM_REVIEWER=false
+ENABLE_RESPONSE_WRITER_LLM=false
+```
+
+打开这些开关后，Planner / Reviewer / Writer 可以调用 LLM，但输出仍会经过 Agent、Action allowlist 和 Booking guard 校验。
+
+## 当前边界
+
+- 主链路已经是 `Understander -> Supervisor Plan -> Specialist Agents -> Response Writer`。
+- query-first 场景不再依赖旧的 `route_decision.continuation` 字段，而是由 `ExecutionPlan.tasks` 展开多步骤任务。
+- 子 Agent 可以通过 `suggested_next_tasks` 提出下一步建议，但是否执行由 Supervisor 校验后决定。
+- Booking Agent 是唯一可以推进预约确认、guard 和写库的业务 Agent。
+- Recommendation Agent 可以做项目推荐、技师推荐、换一个、选择推荐承接，但不直接创建预约。
+- Response Writer 统一组织最终回复，避免多个 Agent 各自输出用户可见文本。

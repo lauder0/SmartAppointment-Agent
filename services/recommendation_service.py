@@ -24,12 +24,33 @@ class RecommendationService:
 
     def __init__(self, db_path: str = "sqlite:///data/smart_appointment.db"):
         self.db_path = db_path
-        self.db_router = DatabaseRouter(db_path)
-        self.recommendation_repo = self.db_router.user_behavior
-        self.appointment_service = AppointmentService(db_path)
-        self.preference_service = AppointmentPreferenceService(db_path)
+        self._db_router: DatabaseRouter | None = None
+        self._appointment_service: AppointmentService | None = None
+        self._preference_service: AppointmentPreferenceService | None = None
         self.is_running = False
         self.scheduler_thread = None
+
+    @property
+    def db_router(self) -> DatabaseRouter:
+        if self._db_router is None:
+            self._db_router = DatabaseRouter(self.db_path)
+        return self._db_router
+
+    @property
+    def recommendation_repo(self):
+        return self.db_router.user_behavior
+
+    @property
+    def appointment_service(self) -> AppointmentService:
+        if self._appointment_service is None:
+            self._appointment_service = AppointmentService(self.db_path)
+        return self._appointment_service
+
+    @property
+    def preference_service(self) -> AppointmentPreferenceService:
+        if self._preference_service is None:
+            self._preference_service = AppointmentPreferenceService(self.db_path)
+        return self._preference_service
 
     def generate_recommendations_job(self) -> Optional[List[Dict[str, Any]]]:
         """Generate due recommendations and persist them without sending."""
@@ -233,7 +254,15 @@ class RecommendationService:
 
     def preview_return_reminder(self, user_id: str = "default_user") -> Dict[str, Any]:
         """Build a recommendation preview without writing or sending."""
-        profile = self.preference_service.recall(user_id)
+        try:
+            profile = self.preference_service.recall(user_id)
+        except Exception as exc:
+            logger.warning("Preference recall unavailable for preview: %s", exc)
+            profile = {
+                "user_id": user_id or "default_user",
+                "appointment_count": 0,
+                "patterns": {"pattern": "no_data", "recommendation": "need_more_appointments"},
+            }
         last_visit = profile.get("last_appointment_at")
         days_since_last = (
             (business_now_naive() - last_visit.replace(tzinfo=None)).days

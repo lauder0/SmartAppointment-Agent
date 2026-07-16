@@ -12,6 +12,10 @@ from .schemas import MatchTechnicianInput, tool_result
 from .technician_finder import TechnicianFinder
 
 
+def _tool_result(*args, **kwargs) -> dict:
+    return tool_result(*args, tool_name="match_technician", **kwargs)
+
+
 @tool(args_schema=MatchTechnicianInput)
 def match_technician(
     start_time: str,
@@ -26,12 +30,12 @@ def match_technician(
     try:
         start_dt = time_config.parse_datetime(start_time)
         if start_dt is None:
-            return tool_result(False, message="预约开始时间格式无效", error="invalid_start_time")
+            return _tool_result(False, message="预约开始时间格式无效", error="invalid_start_time")
 
         end_dt = start_dt + timedelta(minutes=duration_minutes)
         valid_time, invalid_reason = time_config.validate_booking_time(start_dt, end_dt)
         if not valid_time:
-            return tool_result(
+            return _tool_result(
                 False,
                 data={
                     "start_time": time_config.format_datetime(start_dt),
@@ -64,7 +68,7 @@ def match_technician(
         tech = finder.find_technician_with_thought(history, thought_messages.append)
 
         if not tech:
-            return tool_result(
+            return _tool_result(
                 False,
                 data={
                     "start_time": time_config.format_datetime(start_dt),
@@ -75,7 +79,7 @@ def match_technician(
             )
 
         if tech.get("requires_confirmation"):
-            return tool_result(
+            return _tool_result(
                 True,
                 data={
                     "match_type": "recommendation",
@@ -87,7 +91,7 @@ def match_technician(
                 message="指定技师不可用，已找到相似可用技师",
             )
 
-        return tool_result(
+        return _tool_result(
             True,
             data={
                 "match_type": "direct",
@@ -98,4 +102,4 @@ def match_technician(
             message="已找到可用技师",
         )
     except Exception as e:
-        return tool_result(False, message="技师匹配失败", error=str(e))
+        return _tool_result(False, message="技师匹配失败", error=str(e))

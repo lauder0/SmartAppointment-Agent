@@ -1,14 +1,14 @@
-"""Main conversation router for state-aware flow dispatch.
+﻿"""Main conversation router for state-aware flow dispatch.
 
 The supervisor router is intentionally thin. Intent understanding, task
 modeling, context resolution, and decision arbitration live in
-``agents.understanding``.
+``agents.understander``.
 """
 
 from __future__ import annotations
 
 from agents.shared.state import AgentState, ensure_state_defaults
-from agents.understanding.decision_arbiter import understand_user_turn
+from agents.understander.decision_arbiter import understand_user_turn
 
 
 async def main_router_node(state: AgentState) -> AgentState:

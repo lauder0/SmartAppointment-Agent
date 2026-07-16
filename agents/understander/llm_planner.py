@@ -8,6 +8,7 @@ from typing import Any, Dict, Literal, Optional
 
 from config.model_provider import create_chat_model
 
+from .prompts import understanding_fallback_prompt
 from .schemas import LLMPlan, ROUTER_ACTIONS
 
 
@@ -21,7 +22,7 @@ CERTAIN_CONTEXT_SIGNALS = {
     "replace_current_recommendation",
     "accept_current_recommendation",
     "recommend_from_available_options",
-    "handoff_availability_to_booking",
+    "availability_to_booking_selection",
     "continue_pending_task_with_slots",
     "service_selection",
     "service_selection_after_catalog",
@@ -58,6 +59,7 @@ MIN_LLM_CONFIDENCE = 0.55
 
 DEFAULT_TASK_TYPE_BY_ACTION = {
     "answer_knowledge": "knowledge_consultation",
+    "recommend_service": "service_recommendation",
     "query_availability": "availability_query",
     "start_or_continue_booking": "booking_creation",
     "modify_booking": "booking_modification",
@@ -71,7 +73,8 @@ DEFAULT_TASK_TYPE_BY_ACTION = {
 }
 
 ALLOWED_TASK_TYPES_BY_ACTION = {
-    "answer_knowledge": {"knowledge_consultation", "service_recommendation", "answer_knowledge"},
+    "answer_knowledge": {"knowledge_consultation", "answer_knowledge"},
+    "recommend_service": {"service_recommendation", "recommend_service"},
     "query_availability": {"availability_query", "query_availability"},
     "start_or_continue_booking": {"booking_creation", "booking_modification", "start_or_continue_booking"},
     "modify_booking": {"booking_modification", "modify_booking"},
@@ -173,53 +176,12 @@ def validate_llm_plan(parsed: Dict[str, Any], state: Dict[str, Any]) -> Optional
 
 
 def _build_prompt(state: Dict[str, Any], user_text: str) -> str:
-    return f"""
-你是按摩门店智能预约系统的意图理解与任务决策器。你的任务是把用户输入解析为结构化候选计划，不要生成面向用户的回复。
-
-硬性约束：
-1. 只能输出 JSON，不要输出 Markdown 或解释。
-2. 不能直接创建预约、修改数据库、锁定技师或编造业务结果。
-3. 如果缺少确认、取消、选择所需的上下文，必须输出 ask_clarification。
-4. 不要编造服务项目、技师姓名、价格、地址或排班结果。
-5. slot_updates 只能包含这些字段：{sorted(ALLOWED_SLOT_FIELDS)}。
-6. confidence 必须是 0 到 1 的数字；不确定时降低置信度并输出 ask_clarification。
-
-action 路由标准：
-- 静态咨询、项目推荐、价格、地址、营业时间 -> answer_knowledge
-- 实时排班、可约技师、可约时间 -> query_availability
-- 新建预约、补充预约槽位 -> start_or_continue_booking
-- 技师推荐 -> generate_recommendation
-- 更换推荐 -> replace_recommendation，仅当 recommendation.status 为 awaiting_selection
-- 选择推荐技师 -> select_recommended_technician，仅当 recommendation.status 为 awaiting_selection
-- 确认预约 -> confirm_booking，仅当 booking.status 为 awaiting_confirmation
-- 取消待确认预约 -> cancel_booking，仅当 booking.status 为 awaiting_confirmation
-- 需要追问 -> ask_clarification
-- 明确越界或不支持 -> unsupported
-
-可选 action：
-{sorted(ROUTER_ACTIONS)}
-
-状态摘要：
-{json.dumps(_state_summary(state), ensure_ascii=False, default=str)}
-
-用户输入：
-{user_text}
-
-输出 JSON schema：
-{{
-  "action": "ask_clarification",
-  "task_type": "fallback_clarification",
-  "primary_intent": "unknown",
-  "secondary_intents": [],
-  "confidence": 0.0,
-  "slot_updates": {{}},
-  "missing_slots": [],
-  "risk_level": "low",
-  "requires_confirmation": false,
-  "reason": "简短原因",
-  "evidence": []
-}}
-""".strip()
+    return understanding_fallback_prompt(
+        user_text=user_text,
+        state_summary=_state_summary(state),
+        allowed_actions=ROUTER_ACTIONS,
+        allowed_slot_fields=ALLOWED_SLOT_FIELDS,
+    )
 
 
 def _state_summary(state: Dict[str, Any]) -> Dict[str, Any]:

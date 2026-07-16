@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
+from .context_manager import merge_focus_context as merge_managed_focus_context
 from .state import (
     default_availability_result,
     default_booking_state,
@@ -42,15 +43,13 @@ def message_to_history_line(message: BaseMessage) -> str:
     return f"{role}：{message.content}"
 
 
-def merge_focus_context(current: Dict[str, Any] | None, updates: Dict[str, Any] | None) -> Dict[str, Any]:
+def merge_focus_context(
+    current: Dict[str, Any] | None,
+    updates: Dict[str, Any] | None,
+    updated_by: str | None = None,
+) -> Dict[str, Any]:
     """Merge non-empty slot updates into the shared service-request context."""
-    focus = dict(current or default_focus_context())
-    if not updates:
-        return focus
-    for key, value in updates.items():
-        if value not in (None, "", "未知", []):
-            focus[key] = value
-    return focus
+    return merge_managed_focus_context(current, updates, updated_by=updated_by)
 
 
 def focus_updates_from_booking_draft(draft: Dict[str, Any] | None) -> Dict[str, Any]:
@@ -64,6 +63,7 @@ def focus_updates_from_booking_draft(draft: Dict[str, Any] | None) -> Dict[str, 
         "technician_name": draft.get("technician_name"),
         "technician_id": draft.get("technician_id"),
         "preference": draft.get("preference"),
+        "symptom_or_need": draft.get("symptom_or_need"),
     }
 
 
@@ -76,6 +76,7 @@ def focus_updates_from_availability_criteria(criteria: Dict[str, Any] | None) ->
         "duration_minutes": criteria.get("duration_minutes"),
         "gender_preference": criteria.get("gender"),
         "technician_name": criteria.get("technician_name"),
+        "technician_id": criteria.get("technician_id"),
         "preference": criteria.get("preference"),
     }
 
@@ -91,4 +92,5 @@ def booking_draft_from_focus(focus: Dict[str, Any] | None) -> Dict[str, Any]:
         "technician_name": focus.get("technician_name"),
         "technician_id": focus.get("technician_id"),
         "preference": focus.get("preference"),
+        "symptom_or_need": focus.get("symptom_or_need"),
     }

@@ -14,6 +14,8 @@ def normalize_recommendation_state(raw: Dict[str, Any] | None) -> Dict[str, Any]
     recommendation.setdefault("candidate_recommendations", [])
     recommendation.setdefault("selected_recommendation", None)
     recommendation.setdefault("alternative_recommendations", [])
+    recommendation.setdefault("selected_service_recommendation", None)
+    recommendation.setdefault("alternative_service_recommendations", [])
     recommendation.setdefault("preference", None)
     recommendation.setdefault("recommendation_reason", None)
     recommendation.setdefault("confidence", None)

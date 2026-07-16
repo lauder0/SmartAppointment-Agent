@@ -35,6 +35,7 @@ class TurnResult:
     response: str
     passed: bool
     duration_ms: float = 0.0
+    trace: dict[str, Any] = field(default_factory=dict)
     failures: list[str] = field(default_factory=list)
 
 
@@ -238,6 +239,7 @@ async def run_case(case: dict[str, Any], args: argparse.Namespace) -> CaseResult
             response=response,
             passed=not failures,
             duration_ms=duration_ms,
+            trace=state.get("turn_trace") or {},
             failures=failures,
         )
         result.turns.append(turn_result)
@@ -272,6 +274,14 @@ def print_result(result: CaseResult, show_responses: bool) -> None:
         print(f"  T{turn.turn_index} {turn_status} ({turn.duration_ms:.0f} ms): {turn.user}")
         if show_responses or not turn.passed:
             print(f"    response: {turn.response}")
+        if not turn.passed and turn.trace:
+            print(
+                "    trace: "
+                f"{turn.trace.get('trace_id')} "
+                f"route={turn.trace.get('route_action')} "
+                f"reason={turn.trace.get('route_reason')} "
+                f"agent={turn.trace.get('active_agent')}"
+            )
         for failure in turn.failures:
             print(f"    - {failure}")
 
@@ -380,6 +390,7 @@ def write_json_report(path: Path, results: list[CaseResult]) -> None:
                         "user": turn.user,
                         "passed": turn.passed,
                         "duration_ms": turn.duration_ms,
+                        "trace": turn.trace,
                         "failures": turn.failures,
                     }
                     for turn in result.turns

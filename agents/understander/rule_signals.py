@@ -1,10 +1,10 @@
-"""Rule-driven signal collection for clear business expressions."""
+﻿"""Rule-driven signal collection for clear business expressions."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from agents.understanding.rules import RuleMatch, classify_rule_matches
+from agents.understander.rules import RuleMatch, classify_rule_matches
 
 from .schemas import IntentSignal
 
@@ -67,6 +67,16 @@ def collect_rule_signals(
             0.93,
             intent_group="context_operation",
             subtype="service_selection_after_catalog",
+            requires_context=True,
+        )
+    if slots.get("service_type") and any(
+        keyword in user_text for keyword in ("想做", "想要做", "我想做", "我要做", "选", "做这个", "就这个")
+    ):
+        add(
+            "service_selection",
+            0.9,
+            intent_group="context_operation",
+            subtype="service_selection",
             requires_context=True,
         )
     if slots:

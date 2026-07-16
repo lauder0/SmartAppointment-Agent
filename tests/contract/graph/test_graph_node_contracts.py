@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import timedelta
 import unittest
@@ -28,8 +28,9 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        self.assertIn("全身推拿", result["final_response"])
-        self.assertIn("肩颈推拿", result["final_response"])
+        self.assertEqual(result["response_type"], "service_catalog")
+        self.assertEqual(result["response_facts"], {})
+        self.assertNotIn("final_response", result)
         self.assertEqual(result["focus_context"]["last_offer"], "service_catalog")
 
     async def test_service_recommendation_updates_focus_context(self):
@@ -160,8 +161,10 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["booking"]["status"], "drafting")
         self.assertEqual(result["booking"]["missing_fields"], ["start_time", "duration", "gender"])
-        self.assertIn("[预约机器人]", result["final_response"])
-        self.assertIn("messages", result)
+        self.assertEqual(result["response_type"], "booking_missing_slots")
+        self.assertIn("预约的时间", result["response_facts"]["body"])
+        self.assertNotIn("final_response", result)
+        self.assertNotIn("messages", result)
 
     async def test_booking_parse_applies_catalog_default_duration(self):
         class FakeParser:
@@ -222,8 +225,10 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
         result = await booking_confirmation_prompt_node(state)
 
         self.assertEqual(result["booking"]["status"], "awaiting_confirmation")
-        self.assertIn("请问是否确认预约", result["final_response"])
-        self.assertIn("李娜", result["final_response"])
+        self.assertEqual(result["response_type"], "booking_confirmation")
+        self.assertEqual(result["response_facts"]["technician_name"], "李娜")
+        self.assertIn("2026年06月10日 15:00", result["response_facts"]["time_line"])
+        self.assertNotIn("final_response", result)
 
     async def test_booking_confirmation_confirm_sets_confirmed_without_writing(self):
         state = {
@@ -266,7 +271,8 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["booking"]["status"], "cancelled")
         self.assertEqual(result["booking"]["draft"], {})
         self.assertEqual(result["availability_result"]["options"], [])
-        self.assertIn("已取消", result["final_response"])
+        self.assertEqual(result["response_type"], "booking_cancelled")
+        self.assertNotIn("final_response", result)
 
     async def test_booking_guard_blocks_outside_booking_window(self):
         outside_window = time_config.today().replace(hour=15, minute=0) + timedelta(days=3)
@@ -363,3 +369,5 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

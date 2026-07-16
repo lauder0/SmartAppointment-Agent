@@ -39,7 +39,6 @@ def build_understanding_result(
     safety_flags: List[str] = []
     requires_confirmation = False
     execution_policy = "single_action"
-    continuation: Dict[str, Any] | None = None
 
     if "unsafe_or_unsupported" in names or _has_unsafe_signal(raw_text):
         primary_intent = "unsafe_or_unsupported"
@@ -70,6 +69,11 @@ def build_understanding_result(
         next_action = "answer_knowledge"
         route_reason = "knowledge_interrupt_pending_booking"
         secondary_intents = ["suspended_booking_confirmation"]
+    elif _should_continue_booking_draft(booking, names, raw_text):
+        primary_intent = "continue_booking"
+        task_type = "booking_creation"
+        next_action = "start_or_continue_booking"
+        route_reason = "continue_booking_draft"
     elif "replace_current_recommendation" in names:
         primary_intent = "replace_recommendation"
         task_type = "recommendation_replacement"
@@ -85,34 +89,19 @@ def build_understanding_result(
         secondary_intents = _query_first_secondary_intents(names, slots, existing_task, raw_text)
         task_type = _query_first_task_type(names, slots, existing_task, raw_text)
         next_action = "answer_knowledge"
-        route_reason = "query_first_knowledge_then_continue"
-        execution_policy = "query_first_then_continue"
-        continuation = _query_first_continuation(names, slots, existing_task, availability, raw_text)
+        route_reason = "query_first_knowledge_plan"
+        execution_policy = "query_first_plan"
     elif _is_query_first_availability_then_work(names, slots, existing_task, raw_text):
         if _has_recommendation_intent(names, slots, existing_task):
             primary_intent = "recommend_technician"
             task_type = "recommendation_before_booking"
-            continuation = _continuation_decision(
-                action="generate_recommendation",
-                reason="continue_after_availability_query",
-                task_type="technician_recommendation",
-                primary_intent="recommend_technician",
-                secondary_intents=["availability_query"],
-            )
         else:
             primary_intent = "start_booking"
             task_type = "booking_creation"
-            continuation = _continuation_decision(
-                action="start_or_continue_booking",
-                reason="continue_booking_after_availability_query",
-                task_type="booking_creation",
-                primary_intent="start_booking",
-                secondary_intents=["availability_query"],
-            )
         secondary_intents = _query_first_secondary_intents(names, slots, existing_task, raw_text)
         next_action = "query_availability"
-        route_reason = "query_first_availability_then_continue"
-        execution_policy = "query_first_then_continue"
+        route_reason = "query_first_availability_plan"
+        execution_policy = "query_first_plan"
     elif _is_recommendation_before_booking(names, slots, existing_task):
         primary_intent = "recommend_technician"
         secondary_intents = _secondary(names, ["service_selection", "service_selection_after_catalog", "slot_update"])
@@ -126,19 +115,24 @@ def build_understanding_result(
         task_type = "technician_recommendation"
         next_action = "generate_recommendation"
         route_reason = "recommend_from_available_options"
+    elif "continue_availability_query" in names:
+        primary_intent = "query_availability"
+        task_type = "availability_query"
+        next_action = "query_availability"
+        route_reason = "refine_availability_context"
     elif "recommendation_request" in names:
         primary_intent = "recommend_technician"
         task_type = "recommendation_before_booking"
         next_action = "query_availability"
         route_reason = "prepare_candidates_for_recommendation"
-    elif "handoff_availability_to_booking" in names:
+    elif "availability_to_booking_selection" in names:
         primary_intent = "start_booking"
         task_type = "booking_creation"
         next_action = "start_or_continue_booking"
         route_reason = (
             "service_selection_after_availability"
             if ("service_selection" in names or "service_selection_after_catalog" in names)
-            else "handoff_availability_to_booking"
+            else "availability_to_booking_selection"
         )
     elif "knowledge_query" in names:
         primary_intent = "answer_knowledge"
@@ -148,14 +142,14 @@ def build_understanding_result(
     elif "service_recommendation_request" in names:
         primary_intent = "recommend_service"
         task_type = "service_recommendation"
-        next_action = "answer_knowledge"
+        next_action = "recommend_service"
         route_reason = "rule_service_recommendation"
     elif "appointment_request" in names or "formal_booking_request" in names:
         primary_intent = "start_booking"
         task_type = "booking_creation"
         next_action = "start_or_continue_booking"
         route_reason = "rule_booking_request"
-    elif "availability_query" in names or "availability_refinement" in names:
+    elif "availability_query" in names or _should_use_availability_refinement(names, availability, raw_text):
         primary_intent = "query_availability"
         task_type = "availability_query"
         next_action = "query_availability"
@@ -165,11 +159,6 @@ def build_understanding_result(
         task_type = "booking_creation"
         next_action = "start_or_continue_booking"
         route_reason = "service_catalog_selection"
-    elif booking.get("status") == "drafting" and "slot_update" in names:
-        primary_intent = "continue_booking"
-        task_type = "booking_creation"
-        next_action = "start_or_continue_booking"
-        route_reason = "continue_booking_draft"
     elif "greeting" in names or "courtesy" in names:
         primary_intent = "smalltalk"
         task_type = "fallback_smalltalk"
@@ -220,7 +209,6 @@ def build_understanding_result(
         conflicts=conflicts,
         next_action=next_action,
         execution_policy=execution_policy,
-        continuation=continuation,
     )
 
     return {
@@ -240,7 +228,6 @@ def build_understanding_result(
         "subtasks": subtasks,
         "next_action": next_action,
         "execution_policy": execution_policy,
-        "continuation": continuation,
         "route_reason": route_reason,
         "requires_confirmation": requires_confirmation,
         "clarification_question": clarification_question,
@@ -264,6 +251,24 @@ def _is_recommendation_before_booking(names: Set[str], slots: Dict[str, Any], ex
         existing_task.get("task_type") == "recommendation_before_booking"
         and "continue_pending_task_with_slots" in names
     )
+
+
+def _should_continue_booking_draft(booking: Dict[str, Any], names: Set[str], raw_text: str) -> bool:
+    if booking.get("status") != "drafting" or "slot_update" not in names:
+        return False
+    if "knowledge_query" in names or "recommendation_request" in names:
+        return False
+    if "availability_query" in names and _has_explicit_availability_question(raw_text):
+        return False
+    return True
+
+
+def _should_use_availability_refinement(names: Set[str], availability: Dict[str, Any], raw_text: str) -> bool:
+    if "availability_refinement" not in names:
+        return False
+    if availability.get("criteria_snapshot") or availability.get("options"):
+        return True
+    return _has_explicit_availability_question(raw_text)
 
 
 def _is_query_first_knowledge_then_work(
@@ -334,7 +339,7 @@ def _has_explicit_availability_question(raw_text: str) -> bool:
 
 
 def _has_booking_intent(names: Set[str]) -> bool:
-    return bool({"appointment_request", "formal_booking_request", "handoff_availability_to_booking"} & names)
+    return bool({"appointment_request", "formal_booking_request", "availability_to_booking_selection"} & names)
 
 
 def _has_recommendation_intent(names: Set[str], slots: Dict[str, Any], existing_task: Dict[str, Any]) -> bool:
@@ -372,103 +377,6 @@ def _query_first_secondary_intents(
     if _has_booking_intent(names):
         secondary.append("start_booking")
     return list(dict.fromkeys(secondary))
-
-
-def _query_first_continuation(
-    names: Set[str],
-    slots: Dict[str, Any],
-    existing_task: Dict[str, Any],
-    availability: Dict[str, Any],
-    raw_text: str,
-) -> Dict[str, Any]:
-    if _has_availability_query_intent(names, raw_text) and _has_recommendation_intent(names, slots, existing_task):
-        return _continuation_decision(
-            action="query_availability",
-            reason="query_availability_before_recommendation",
-            task_type="recommendation_before_booking",
-            primary_intent="recommend_technician",
-            secondary_intents=["knowledge_query", "availability_query"],
-            continuation=_continuation_decision(
-                action="generate_recommendation",
-                reason="continue_after_availability_query",
-                task_type="technician_recommendation",
-                primary_intent="recommend_technician",
-                secondary_intents=["availability_query"],
-            ),
-        )
-    if _has_availability_query_intent(names, raw_text) and _has_booking_intent(names):
-        return _continuation_decision(
-            action="query_availability",
-            reason="query_availability_before_booking",
-            task_type="booking_creation",
-            primary_intent="start_booking",
-            secondary_intents=["knowledge_query", "availability_query"],
-            continuation=_continuation_decision(
-                action="start_or_continue_booking",
-                reason="continue_booking_after_availability_query",
-                task_type="booking_creation",
-                primary_intent="start_booking",
-                secondary_intents=["availability_query"],
-            ),
-        )
-    if _has_recommendation_intent(names, slots, existing_task):
-        if availability.get("criteria_snapshot") or availability.get("options"):
-            return _continuation_decision(
-                action="generate_recommendation",
-                reason="continue_recommendation_after_knowledge",
-                task_type="technician_recommendation",
-                primary_intent="recommend_technician",
-                secondary_intents=["knowledge_query"],
-            )
-        return _continuation_decision(
-            action="query_availability",
-            reason="prepare_candidates_for_recommendation",
-            task_type="recommendation_before_booking",
-            primary_intent="recommend_technician",
-            secondary_intents=["knowledge_query"],
-            continuation=_continuation_decision(
-                action="generate_recommendation",
-                reason="continue_after_availability_query",
-                task_type="technician_recommendation",
-                primary_intent="recommend_technician",
-                secondary_intents=["availability_query"],
-            ),
-        )
-    if _has_booking_intent(names):
-        return _continuation_decision(
-            action="start_or_continue_booking",
-            reason="continue_booking_after_knowledge",
-            task_type="booking_creation",
-            primary_intent="start_booking",
-            secondary_intents=["knowledge_query"],
-        )
-    return _continuation_decision(
-        action="query_availability",
-        reason="continue_availability_after_knowledge",
-        task_type="availability_query",
-        primary_intent="query_availability",
-        secondary_intents=["knowledge_query"],
-    )
-
-
-def _continuation_decision(
-    action: str,
-    reason: str,
-    task_type: str,
-    primary_intent: str,
-    secondary_intents: List[str],
-    continuation: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
-    decision = {
-        "action": action,
-        "reason": reason,
-        "task_type": task_type,
-        "primary_intent": primary_intent,
-        "secondary_intents": secondary_intents,
-    }
-    if continuation:
-        decision["continuation"] = continuation
-    return decision
 
 
 def _missing_slots(
@@ -600,7 +508,6 @@ def _build_task_frame(
     conflicts: List[Dict[str, Any]],
     next_action: str,
     execution_policy: str = "single_action",
-    continuation: Dict[str, Any] | None = None,
 ) -> TaskFrame:
     if task_type in {"unsupported", "fallback_smalltalk"}:
         frame = default_task_frame()
@@ -632,7 +539,6 @@ def _build_task_frame(
         "missing_slots": missing_slots,
         "pending_next": next_action,
         "execution_policy": execution_policy,
-        "continuation": continuation,
         "last_question_type": "ask_missing_slots" if missing_slots else None,
         "subtasks": subtasks,
         "confirmations_required": ["booking_confirmation"] if task_type.startswith("booking") else [],
@@ -680,3 +586,5 @@ def _selected_policy(task_type: str, names: Set[str]) -> str:
     if "accept_current_recommendation" in names:
         return "recommendation_context_guard"
     return "standard_priority"
+
+

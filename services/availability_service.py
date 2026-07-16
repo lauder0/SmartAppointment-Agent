@@ -23,6 +23,20 @@ class AvailabilityIntent(str, Enum):
     UNCERTAIN = "uncertain"
 
 
+DEFAULT_TECHNICIAN_NAMES = (
+    "张伟",
+    "王强",
+    "李娜",
+    "赵敏",
+    "刘洋",
+    "孙丽",
+    "周杰",
+    "吴婷",
+    "郑斌",
+    "何静",
+)
+
+
 class AvailabilityService:
     """查询实时可约时段和技师空闲情况。"""
 
@@ -48,8 +62,17 @@ class AvailabilityService:
         "交通", "环境", "注意事项", "禁忌", "功效", "区别"
     ]
 
-    def __init__(self):
-        self.appointment_service = AppointmentService()
+    def __init__(self, appointment_service: AppointmentService | None = None):
+        # Lazily initialize the database-backed service. The understanding
+        # layer uses AvailabilityService for pure text parsing, so constructing
+        # this class must not open SQLite or perform business I/O.
+        self._appointment_service = appointment_service
+
+    @property
+    def appointment_service(self) -> AppointmentService:
+        if self._appointment_service is None:
+            self._appointment_service = AppointmentService()
+        return self._appointment_service
 
     @staticmethod
     def parse_service_type(text: str) -> Optional[str]:
@@ -105,7 +128,7 @@ class AvailabilityService:
             return False
         if AvailabilityService.is_formal_booking_request(normalized):
             return True
-        starter_keywords = ["我要预约", "我想预约", "我要约", "我想约", "约个", "预约一个"]
+        starter_keywords = ["我要预约", "我想预约", "我要约", "我想约", "想约一下", "约一下", "约个", "预约一个"]
         query_keywords = ["有哪些", "有没有", "有空", "空位", "空闲", "可约", "能约", "查", "看看", "看一下"]
         lowered = normalized.lower()
         if any(keyword in lowered for keyword in ("book", "booking", "reserve", "appointment")):
@@ -200,7 +223,7 @@ class AvailabilityService:
 
     def answer_availability_query(self, text: str, base_criteria: Optional[Dict[str, Any]] = None) -> str:
         """返回实时可约时段查询的自然语言回答。"""
-        criteria = self.parse_query_criteria(text)
+        criteria = self.parse_query_criteria(text, include_db_technicians=True)
         if base_criteria:
             criteria = self.merge_query_criteria(base_criteria, criteria)
         policy_error = self._availability_time_policy_error(criteria)
@@ -246,19 +269,23 @@ class AvailabilityService:
 
     def extract_available_technician_names(self, response: str) -> List[str]:
         """从实时排班回复中提取展示过的技师姓名，用于短期上下文回指。"""
-        technician_names = {
-            technician.get("name")
-            for technician in self.appointment_service.get_all_technicians()
-            if technician.get("name")
-        }
+        technician_names = set(DEFAULT_TECHNICIAN_NAMES)
+        try:
+            technician_names.update(
+                technician.get("name")
+                for technician in self.appointment_service.get_all_technicians()
+                if technician.get("name")
+            )
+        except Exception:
+            pass
         return [name for name in technician_names if name in response]
 
-    def parse_query_criteria(self, text: str) -> Dict[str, Any]:
+    def parse_query_criteria(self, text: str, *, include_db_technicians: bool = False) -> Dict[str, Any]:
         """解析实时排班查询条件，并标记哪些条件来自本轮用户明确输入。"""
         target_date = self._parse_date(text)
         duration_minutes = self._parse_duration(text)
         gender = self._parse_gender(text)
-        technician_name = self._parse_technician_name(text)
+        technician_name = self._parse_technician_name(text, include_db=include_db_technicians)
         service_type = self.parse_service_type(text)
         preference = self.parse_preference(text)
         start_time = self._parse_specific_start_time(text, target_date)
@@ -475,9 +502,9 @@ class AvailabilityService:
 
     def _parse_gender(self, text: str) -> Optional[str]:
         lowered = text.lower()
-        if "男技师" in text or "男性技师" in text or "男师傅" in text:
+        if "男技师" in text or "男性技师" in text or "男师傅" in text or "男的" in text:
             return "男"
-        if "女技师" in text or "女性技师" in text or "女师傅" in text:
+        if "女技师" in text or "女性技师" in text or "女师傅" in text or "女的" in text:
             return "女"
         if re.search(r"\b(female|woman|women|girl)\b", lowered):
             return "女"
@@ -485,7 +512,14 @@ class AvailabilityService:
             return "男"
         return None
 
-    def _parse_technician_name(self, text: str) -> Optional[str]:
+    def _parse_technician_name(self, text: str, *, include_db: bool = True) -> Optional[str]:
+        for name in DEFAULT_TECHNICIAN_NAMES:
+            if name in text:
+                return name
+
+        if not include_db:
+            return None
+
         for technician in self.appointment_service.get_all_technicians():
             name = technician.get("name")
             if name and name in text:

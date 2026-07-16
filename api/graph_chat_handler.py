@@ -1,8 +1,9 @@
-"""Chat handler backed by the 3.0 supervisor workflow."""
+﻿"""Chat handler backed by the 3.0 supervisor workflow."""
 
 from __future__ import annotations
 
 import uuid
+import time
 
 from langchain_core.messages import HumanMessage
 
@@ -15,8 +16,10 @@ from agents.supervisor.state import (
     default_recommendation_state,
     default_shared_focus_context,
 )
-from agents.understanding.schemas import default_task_frame
+from agents.supervisor.planning.plan_schema import default_execution_plan
+from agents.understander.schemas import default_task_frame
 from services.session_state_store import SessionStateStore, create_session_state_store
+from services.trace_service import attach_turn_trace, new_trace_id
 
 _graph = None
 _session_store: SessionStateStore | None = None
@@ -50,9 +53,12 @@ def _initial_state(session_id: str, user_id: str = "default_user") -> Supervisor
         "booking": default_booking_state(),
         "recommendation": default_recommendation_state(),
         "task_frame": default_task_frame(),
+        "execution_plan": default_execution_plan(),
         "route_decision": None,
-        "handoff_payload": {},
         "last_agent_result": None,
+        "turn_results": [],
+        "turn_trace": None,
+        "trace_history": [],
         "last_completed_booking": None,
         "final_response": None,
         "error": None,
@@ -65,7 +71,27 @@ async def reset_graph_session(session_id: str) -> None:
 
 
 async def get_graph_session_state(session_id: str) -> SupervisorState:
-    return await _get_session_store().get(session_id) or {}
+    state = await _get_session_store().get(session_id) or {}
+    return _with_public_compat_aliases(state)
+
+
+def _with_public_compat_aliases(state: SupervisorState) -> SupervisorState:
+    """Return session state with legacy read aliases for eval/debug clients."""
+    if not state:
+        return state
+    public_state: SupervisorState = dict(state)
+    availability = public_state.get("availability") or {}
+    public_state.setdefault(
+        "availability_result",
+        {
+            "criteria_snapshot": availability.get("criteria_snapshot"),
+            "options": availability.get("options", []),
+            "available_technician_names": availability.get("available_technician_names", []),
+            "last_answer": availability.get("last_answer"),
+        },
+    )
+    public_state.setdefault("focus_context", public_state.get("shared_focus_context"))
+    return public_state
 
 
 async def process_user_input_graph(
@@ -84,7 +110,33 @@ async def process_user_input_graph(
         state["user_id"] = user_id or state.get("user_id") or "default_user"
         state["messages"] = list(state.get("messages", [])) + [HumanMessage(content=user_input)]
 
-        result = await _get_graph().ainvoke(state)
+        trace_id = new_trace_id()
+        started = time.perf_counter()
+        try:
+            result = await _get_graph().ainvoke(state)
+        except Exception as exc:
+            latency_ms = (time.perf_counter() - started) * 1000
+            error_state = dict(state)
+            error_state["error"] = str(exc)
+            await store.set(
+                resolved_session_id,
+                attach_turn_trace(
+                    error_state,
+                    trace_id=trace_id,
+                    user_input=user_input,
+                    latency_ms=latency_ms,
+                    error=str(exc),
+                ),
+            )
+            raise
+
+        latency_ms = (time.perf_counter() - started) * 1000
+        result = attach_turn_trace(
+            result,
+            trace_id=trace_id,
+            user_input=user_input,
+            latency_ms=latency_ms,
+        )
         await store.set(resolved_session_id, result)
         return result
 

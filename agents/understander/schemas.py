@@ -14,6 +14,7 @@ ROUTER_ACTIONS = {
     "modify_booking",
     "confirm_booking",
     "cancel_booking",
+    "recommend_service",
     "generate_recommendation",
     "replace_recommendation",
     "select_recommended_technician",
@@ -73,7 +74,6 @@ class TaskFrame(TypedDict, total=False):
     missing_slots: List[str]
     pending_next: Optional[str]
     execution_policy: str
-    continuation: Optional[Dict[str, Any]]
     last_question_type: Optional[str]
     subtasks: List[Dict[str, Any]]
     confirmations_required: List[str]
@@ -105,7 +105,6 @@ class UnderstandingResult(TypedDict, total=False):
     subtasks: List[Dict[str, Any]]
     next_action: str
     execution_policy: str
-    continuation: Optional[Dict[str, Any]]
     route_reason: str
     requires_confirmation: bool
     clarification_question: Optional[str]
@@ -130,7 +129,6 @@ class RouteDecision(TypedDict, total=False):
     safety_flags: List[str]
     risk_level: str
     execution_policy: str
-    continuation: Optional[Dict[str, Any]]
     clarification_question: Optional[str]
     trace: Dict[str, Any]
 
@@ -147,7 +145,6 @@ def default_task_frame() -> TaskFrame:
         "missing_slots": [],
         "pending_next": None,
         "execution_policy": "single_action",
-        "continuation": None,
         "last_question_type": None,
         "subtasks": [],
         "confirmations_required": [],

@@ -1,11 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 
 from langchain_core.messages import HumanMessage
 
 import agents.specialists.recommendation.nodes as recommendation_nodes
-from agents.shared.response_composer import composer
 from agents.specialists.booking.flow import run_booking_flow
 from agents.specialists.recommendation.nodes import recommend_technician_node
 from agents.supervisor.nodes import supervisor_entry_node, supervisor_router_node
@@ -112,7 +111,6 @@ def test_recommendation_node_saves_ranked_result(monkeypatch):
 
     monkeypatch.setattr(recommendation_nodes, "TechnicianRecommendationService", FakeRanker)
     monkeypatch.setattr(recommendation_nodes, "recall_preferences", lambda _state: {})
-    monkeypatch.setattr(composer, "enable_llm", False)
 
     result = asyncio.run(
         recommend_technician_node(
@@ -122,7 +120,10 @@ def test_recommendation_node_saves_ranked_result(monkeypatch):
 
     assert result["recommendation"]["status"] == "awaiting_selection"
     assert result["recommendation"]["selected_recommendation"]["technician_name"] == "张伟"
-    assert "张伟" in result["final_response"]
+    assert result.get("final_response") is None
+    assert result["last_agent_result"]["response_type"] == "technician_recommendation"
+    assert result["last_agent_result"]["facts"]["recommended_technician"]["technician_name"] == "张伟"
+    assert "张伟" in result["last_agent_result"]["facts"]["body"]
 
 
 def test_accepting_recommendation_enters_booking_confirmation():
@@ -162,7 +163,9 @@ def test_accepting_recommendation_enters_booking_confirmation():
 
     assert result["booking"]["status"] == "awaiting_confirmation"
     assert result["booking"]["selected_option"]["technician_name"] == "张伟"
-    assert "请问是否确认预约" in result["final_response"]
+    assert result["response_type"] == "booking_confirmation"
+    assert result["response_facts"]["technician_name"] == "张伟"
+    assert result.get("final_response") is None
 
 
 def test_accepting_named_candidate_overrides_current_recommendation():
@@ -214,4 +217,8 @@ def test_accepting_named_candidate_overrides_current_recommendation():
     assert result["booking"]["selected_option"]["technician_name"] == "王强"
     assert draft["service_type"] == "背部推拿"
     assert draft["duration_minutes"] == 40
-    assert "请问是否确认预约" in result["final_response"]
+    assert result["response_type"] == "booking_confirmation"
+    assert result["response_facts"]["technician_name"] == "王强"
+    assert result.get("final_response") is None
+
+

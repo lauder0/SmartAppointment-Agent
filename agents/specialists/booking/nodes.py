@@ -17,8 +17,8 @@ from agents.specialists.booking.actions import (
     booking_missing_node,
     booking_parse_node,
 )
-from agents.specialists.fallback_actions import clarification_node
-from agents.specialists.common import apply_update
+from agents.specialists.fallback.actions import clarification_node
+from agents.specialists.result_contract import apply_update
 
 
 async def parse_slots(state: Dict[str, Any]) -> Dict[str, Any]:

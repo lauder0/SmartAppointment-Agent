@@ -1,4 +1,4 @@
-"""Shared state schema for the LangGraph agent workflow."""
+﻿"""Shared state schema for the LangGraph agent workflow."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
-from agents.understanding.schemas import default_task_frame
+from agents.shared.context_schema import default_focus_context
+from agents.supervisor.planning.plan_schema import default_execution_plan
+from agents.understander.schemas import default_task_frame
 
 
 class AgentState(TypedDict, total=False):
@@ -21,29 +23,12 @@ class AgentState(TypedDict, total=False):
     booking: Dict[str, Any]
     recommendation: Dict[str, Any]
     task_frame: Dict[str, Any]
+    execution_plan: Dict[str, Any]
     route_decision: Optional[Dict[str, Any]]
     last_completed_booking: Optional[Dict[str, Any]]
     final_response: Optional[str]
     error: Optional[str]
     tool_results: Dict[str, Any]
-
-
-def default_focus_context() -> Dict[str, Any]:
-    """Create a fresh service-request focus context.
-
-    This records what the user is currently talking about, independent of
-    whether the next action is availability lookup or booking.
-    """
-    return {
-        "service_type": None,
-        "start_time": None,
-        "duration_minutes": None,
-        "gender_preference": None,
-        "technician_name": None,
-        "technician_id": None,
-        "preference": None,
-        "last_offer": None,
-    }
 
 
 def default_availability_result() -> Dict[str, Any]:
@@ -76,6 +61,7 @@ def ensure_state_defaults(state: AgentState) -> AgentState:
     state.setdefault("booking", default_booking_state())
     state.setdefault("recommendation", {})
     state.setdefault("task_frame", default_task_frame())
+    state.setdefault("execution_plan", default_execution_plan())
     state.setdefault("route_decision", None)
     state.setdefault("tool_results", {})
     state.setdefault("last_completed_booking", None)

@@ -1,4 +1,4 @@
-"""Booking transaction graph nodes."""
+﻿"""Booking transaction graph nodes."""
 
 from __future__ import annotations
 
@@ -10,25 +10,23 @@ from typing import Any, Dict
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agents.specialists.booking.parser import InputParser
+from agents.specialists.booking.parser import InputParser  # retained for legacy test/extension patch points
 from agents.specialists.booking.message_builder import MessageBuilder
-from agents.understanding.rules import (
+from agents.understander.rules import (
     is_negative_confirmation,
     is_positive_confirmation,
     is_technician_replacement_request,
 )
 from agents.shared.node_utils import (
-    append_assistant_message,
     booking_draft_from_focus,
     focus_updates_from_booking_draft,
     last_user_text,
     merge_focus_context,
     reset_active_booking_update,
 )
-from agents.shared.response_composer import composer
 from agents.shared.slot_utils import default_duration_for_service
 from agents.shared.state import AgentState, default_booking_state, ensure_state_defaults
-from config.model_provider import create_chat_model
+from config.model_provider import create_chat_model  # retained for legacy test/extension patch points
 from config.time_config import time_config
 from services.appointment_service import AppointmentService
 from services.availability_service import AvailabilityService
@@ -91,16 +89,10 @@ def _build_chat_history(state: AgentState) -> InMemoryChatMessageHistory:
 def _apply_recalled_preferences(
     draft: Dict[str, Any],
     recalled: Dict[str, Any],
-    include_technician: bool = True,
+    include_technician: bool = False,
 ) -> None:
     if not recalled:
         return
-    if not draft.get("service_type") and recalled.get("preferred_service"):
-        draft["service_type"] = recalled["preferred_service"]
-    if not draft.get("duration_minutes") and recalled.get("preferred_duration_minutes"):
-        draft["duration_minutes"] = recalled["preferred_duration_minutes"]
-    if not draft.get("gender_preference") and recalled.get("preferred_gender"):
-        draft["gender_preference"] = recalled["preferred_gender"]
     if not draft.get("preference") and recalled.get("preferred_style"):
         draft["preference"] = recalled["preferred_style"]
     if include_technician and not draft.get("technician_name") and recalled.get("preferred_technician_name"):
@@ -206,6 +198,39 @@ def _first_non_empty(container: Dict[str, Any], keys: tuple[str, ...]) -> Any:
     return None
 
 
+def _deterministic_booking_parse(
+    user_input: str,
+    route_slots: Dict[str, Any],
+    rule_criteria: Dict[str, Any],
+    rule_service_type: str | None,
+    rule_preference: str | None,
+) -> Dict[str, Any]:
+    start_time = route_slots.get("start_time")
+    if not start_time and rule_criteria.get("start_time"):
+        start_time = time_config.format_datetime(rule_criteria["start_time"])
+
+    duration = route_slots.get("duration_minutes") or rule_criteria.get("duration_minutes")
+    project = route_slots.get("service_type") or rule_service_type
+    gender = route_slots.get("gender_preference") or rule_criteria.get("gender")
+    preference = route_slots.get("preference") or rule_preference or rule_criteria.get("preference")
+    technician_name = route_slots.get("technician_name") or rule_criteria.get("technician_name")
+
+    return {
+        "gender": gender or "未知",
+        "start_time": start_time or "未知",
+        "duration": f"{duration}分钟" if duration else "未知",
+        "project": project or "未知",
+        "preference": preference or "未知",
+        "technician_name": technician_name or "未知",
+        "confirmation": "未知",
+        "info_complete": False,
+        "unrelated": False,
+        "missing_info": [],
+        "source": "deterministic_rule_parser",
+        "raw_text": user_input,
+    }
+
+
 def _selected_technician_id(booking: Dict[str, Any]) -> Any:
     selected = booking.get("selected_option") or {}
     return selected.get("technician_id") or (booking.get("draft") or {}).get("technician_id")
@@ -230,12 +255,61 @@ def _booking_idempotency_key(state: AgentState, booking: Dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _booking_response(
+    response_type: str,
+    facts: Dict[str, Any] | None = None,
+    result_type: str | None = None,
+) -> Dict[str, Any]:
+    return {
+        "response_type": response_type,
+        "response_facts": facts or {},
+        "result_type": result_type or response_type,
+    }
+
+
+def _confirmation_time_line(draft: Dict[str, Any]) -> str:
+    start_time = draft.get("start_time")
+    duration = draft.get("duration_minutes")
+    start_text = start_time
+    end_text = ""
+    try:
+        parsed_start = time_config.parse_datetime(start_time) if isinstance(start_time, str) else start_time
+        start_text = time_config.format_datetime(parsed_start, "%Y年%m月%d日 %H:%M")
+        end_text = time_config.format_datetime(parsed_start + timedelta(minutes=duration), "%H:%M")
+    except Exception:
+        end_text = ""
+    return f"{start_text}-{end_text}" if end_text else str(start_text)
+
+
+def _booking_confirmation_facts(booking: Dict[str, Any]) -> Dict[str, Any]:
+    draft = booking.get("draft") or {}
+    return {
+        "time_line": _confirmation_time_line(draft),
+        "service_type": draft.get("service_type"),
+        "duration_minutes": draft.get("duration_minutes"),
+        "technician_name": _selected_technician_name(booking),
+    }
+
+
+def _booking_confirmation_summary(facts: Dict[str, Any]) -> str:
+    return (
+        f"时间：{facts.get('time_line')}; "
+        f"项目：{facts.get('service_type')}; "
+        f"时长：{facts.get('duration_minutes')}分钟; "
+        f"技师：{facts.get('technician_name')}"
+    )
+
+
 async def booking_parse_node(state: AgentState) -> AgentState:
     """Parse user input and merge it into the active booking draft."""
     state = ensure_state_defaults(state)
     user_input = last_user_text(state)
     booking = dict(state.get("booking") or default_booking_state())
     draft = _seed_draft_from_availability(state, booking.get("draft") or {})
+    focus_draft = booking_draft_from_focus(state.get("focus_context"))
+    for key, value in focus_draft.items():
+        if value not in (None, "", "未知", [], {}) and not draft.get(key):
+            draft[key] = value
     user_id = state.get("user_id") or "default_user"
     replace_technician = is_technician_replacement_request(user_input)
 
@@ -253,13 +327,15 @@ async def booking_parse_node(state: AgentState) -> AgentState:
     rule_criteria = service.parse_query_criteria(user_input)
     rule_service_type = service.parse_service_type(user_input)
     rule_preference = service.parse_preference(user_input)
+    route_slots = (state.get("route_decision") or {}).get("slot_updates") or {}
     explicit_technician_name = False
-
-    parser = InputParser(create_chat_model(temperature=0))
-    ai_content = ""
-    for token in parser.parse_stream(user_input, _build_chat_history(state)):
-        ai_content += token
-    parsed = parser.parse_data(ai_content)
+    parsed = _deterministic_booking_parse(
+        user_input,
+        route_slots,
+        rule_criteria,
+        rule_service_type,
+        rule_preference,
+    )
 
     if parsed.get("start_time") and parsed["start_time"] != "未知" and _has_time_expression(user_input):
         draft["start_time"] = parsed["start_time"]
@@ -289,6 +365,9 @@ async def booking_parse_node(state: AgentState) -> AgentState:
     if rule_criteria.get("technician_name"):
         draft["technician_name"] = rule_criteria["technician_name"]
         explicit_technician_name = True
+    if route_slots.get("technician_name"):
+        draft["technician_name"] = route_slots["technician_name"]
+        explicit_technician_name = True
 
     if replace_technician and not explicit_technician_name:
         draft.pop("technician_name", None)
@@ -298,7 +377,7 @@ async def booking_parse_node(state: AgentState) -> AgentState:
     _apply_recalled_preferences(
         draft,
         recalled_preferences,
-        include_technician=not replace_technician,
+        include_technician=False,
     )
     _apply_service_slot_defaults(draft, booking)
 
@@ -335,20 +414,17 @@ async def booking_missing_node(state: AgentState) -> AgentState:
     missing = booking.get("missing_fields") or _draft_missing_fields(booking.get("draft") or {})
     booking["missing_fields"] = missing
     booking["status"] = "drafting"
-    reply = composer.reply(
-        "booking_missing_slots",
-        {
-            "body": MessageBuilder().create_missing_info_questions(missing),
-            "agent_label": "预约机器人",
-        },
-    )
-    return append_assistant_message(
-        {
-            "booking": booking,
-            "final_response": reply,
-        },
-        reply,
-    )
+    return {
+        "booking": booking,
+        **_booking_response(
+            "booking_missing_slots",
+            {
+                "body": MessageBuilder().create_missing_info_questions(missing),
+                "agent_label": "预约机器人",
+            },
+            "booking_missing",
+        ),
+    }
 
 
 async def booking_match_node(state: AgentState) -> AgentState:
@@ -408,17 +484,17 @@ async def booking_accept_recommendation_node(state: AgentState) -> AgentState:
     if not technician_id or not technician_name:
         booking["status"] = "drafting"
         booking["missing_fields"] = ["technician_id"]
-        reply = composer.reply(
-            "booking_failed",
-            {"body": "当前没有可接受的推荐技师，请先让我重新推荐一位。"},
-        )
-        return append_assistant_message(
-            {
-                "booking": booking,
-                "final_response": reply,
-            },
-            reply,
-        )
+        return {
+            "booking": booking,
+            **_booking_response(
+                "booking_failed",
+                {
+                    "body": "当前没有可接受的推荐技师，请先让我重新推荐一位。",
+                    "agent_label": "预约机器人",
+                },
+                "booking_failed",
+            ),
+        }
 
     draft = dict(booking.get("draft") or {})
     field_mapping = {
@@ -495,51 +571,26 @@ async def booking_confirmation_prompt_node(state: AgentState) -> AgentState:
                 "start_time": draft.get("start_time"),
             },
         )
-        reply = await composer.areply(
-            "booking_recommendation",
-            {
-                "body": reply_body,
-                "agent_label": "预约机器人",
-                "original_technician": match_result.get("original_technician") or {},
-                "recommended_technician": match_result.get("recommended_technician") or {},
-                "service_type": draft.get("service_type"),
-                "start_time": draft.get("start_time"),
-            },
-            {"user_input": last_user_text(state)},
-        )
+        response_type = "booking_recommendation"
+        response_facts = {
+            "body": reply_body,
+            "agent_label": "预约机器人",
+            "original_technician": match_result.get("original_technician") or {},
+            "recommended_technician": match_result.get("recommended_technician") or {},
+            "service_type": draft.get("service_type"),
+            "start_time": draft.get("start_time"),
+        }
     else:
-        start_time = draft.get("start_time")
-        duration = draft.get("duration_minutes")
-        start_text = start_time
-        end_text = ""
-        try:
-            parsed_start = time_config.parse_datetime(start_time) if isinstance(start_time, str) else start_time
-            start_text = time_config.format_datetime(parsed_start, "%Y年%m月%d日 %H:%M")
-            end_text = time_config.format_datetime(parsed_start + timedelta(minutes=duration), "%H:%M")
-        except Exception:
-            end_text = ""
-        time_line = f"{start_text}-{end_text}" if end_text else str(start_text)
-        composed = composer.compose(
-            "booking_confirmation",
-            {
-                "time_line": time_line,
-                "service_type": draft.get("service_type"),
-                "duration_minutes": duration,
-                "technician_name": _selected_technician_name(booking),
-            },
-        )
-        reply = composed.reply
-        reply_body = composed.body
+        response_type = "booking_confirmation"
+        response_facts = _booking_confirmation_facts(booking)
+        reply_body = _booking_confirmation_summary(response_facts)
 
     booking["status"] = "awaiting_confirmation"
     booking["confirmation_summary"] = reply_body
-    return append_assistant_message(
-        {
-            "booking": booking,
-            "final_response": reply,
-        },
-        reply,
-    )
+    return {
+        "booking": booking,
+        **_booking_response(response_type, response_facts, "booking_confirmation"),
+    }
 
 
 async def booking_confirmation_node(state: AgentState) -> AgentState:
@@ -556,23 +607,18 @@ async def booking_confirmation_node(state: AgentState) -> AgentState:
         cancelled = dict(update["booking"])
         cancelled["status"] = "cancelled"
         update["booking"] = cancelled
-        reply = composer.reply("booking_cancelled")
-        update["final_response"] = reply
-        return append_assistant_message(update, reply)
+        update.update(_booking_response("booking_cancelled", {}, "booking_cancelled"))
+        return update
 
     if positive and booking.get("status") == "awaiting_confirmation":
         booking["status"] = "confirmed"
         return {"booking": booking}
 
     booking["status"] = "awaiting_confirmation"
-    reply = composer.reply("booking_unclear_confirmation")
-    return append_assistant_message(
-        {
-            "booking": booking,
-            "final_response": reply,
-        },
-        reply,
-    )
+    return {
+        "booking": booking,
+        **_booking_response("booking_unclear_confirmation", {}, "booking_unclear_confirmation"),
+    }
 
 
 async def booking_guard_node(state: AgentState) -> AgentState:
@@ -595,15 +641,11 @@ async def booking_guard_node(state: AgentState) -> AgentState:
         booking["status"] = "drafting"
         booking["missing_fields"] = missing
         booking["guard_result"] = {"success": False, "reason": "missing_required_fields", "missing": missing}
-        reply = composer.reply("booking_guard_missing")
-        return append_assistant_message(
-            {
-                "booking": booking,
-                "final_response": reply,
-                "tool_results": {**(state.get("tool_results") or {}), "booking_guard": booking["guard_result"]},
-            },
-            reply,
-        )
+        return {
+            "booking": booking,
+            "tool_results": {**(state.get("tool_results") or {}), "booking_guard": booking["guard_result"]},
+            **_booking_response("booking_guard_missing", {}, "booking_guard_missing"),
+        }
 
     try:
         start_dt = time_config.parse_datetime(str(required["start_time"]))
@@ -618,15 +660,11 @@ async def booking_guard_node(state: AgentState) -> AgentState:
         booking["status"] = "drafting"
         booking["missing_fields"] = ["start_time", "duration_minutes", "technician_id"]
         booking["guard_result"] = {"success": False, "reason": "invalid_guard_fields"}
-        reply = composer.reply("booking_guard_invalid")
-        return append_assistant_message(
-            {
-                "booking": booking,
-                "final_response": reply,
-                "tool_results": {**(state.get("tool_results") or {}), "booking_guard": booking["guard_result"]},
-            },
-            reply,
-        )
+        return {
+            "booking": booking,
+            "tool_results": {**(state.get("tool_results") or {}), "booking_guard": booking["guard_result"]},
+            **_booking_response("booking_guard_invalid", {}, "booking_guard_invalid"),
+        }
 
     end_dt = start_dt + timedelta(minutes=duration_minutes)
     valid_time, invalid_reason = time_config.validate_booking_time(start_dt, end_dt)
@@ -637,37 +675,34 @@ async def booking_guard_node(state: AgentState) -> AgentState:
         booking["guard_result"] = {"success": False, "reason": invalid_reason}
         start_hour, end_hour = time_config.get_business_hours()
         window_days = time_config.get_booking_window_days()
-        reply = composer.reply(
-            "booking_guard_time_invalid",
-            {
-                "booking_window_days": window_days,
-                "business_start": start_hour,
-                "business_end": end_hour,
-            },
-        )
-        return append_assistant_message(
-            {
-                "booking": booking,
-                "final_response": reply,
-                "tool_results": {**(state.get("tool_results") or {}), "booking_guard": booking["guard_result"]},
-            },
-            reply,
-        )
+        return {
+            "booking": booking,
+            "tool_results": {**(state.get("tool_results") or {}), "booking_guard": booking["guard_result"]},
+            **_booking_response(
+                "booking_guard_time_invalid",
+                {
+                    "booking_window_days": window_days,
+                    "business_start": start_hour,
+                    "business_end": end_hour,
+                },
+                "booking_guard_time_invalid",
+            ),
+        }
 
     if not AppointmentService().is_technician_available(technician_id, start_dt, end_dt):
         booking["status"] = "drafting"
         booking["selected_option"] = None
         booking["missing_fields"] = ["start_time"]
         booking["guard_result"] = {"success": False, "reason": "technician_unavailable"}
-        reply = composer.reply("booking_guard_technician_unavailable")
-        return append_assistant_message(
-            {
-                "booking": booking,
-                "final_response": reply,
-                "tool_results": {**(state.get("tool_results") or {}), "booking_guard": booking["guard_result"]},
-            },
-            reply,
-        )
+        return {
+            "booking": booking,
+            "tool_results": {**(state.get("tool_results") or {}), "booking_guard": booking["guard_result"]},
+            **_booking_response(
+                "booking_guard_technician_unavailable",
+                {},
+                "booking_guard_technician_unavailable",
+            ),
+        }
 
     booking["guard_result"] = {"success": True, "reason": "ready_to_create"}
     return {
@@ -712,16 +747,13 @@ async def booking_complete_node(state: AgentState) -> AgentState:
     end_time = data.get("end_time", "")
     end_time_text = end_time.split(" ", 1)[1] if " " in end_time else end_time
     technician_name = _selected_technician_name(booking)
-    reply = composer.reply(
-        "booking_success",
-        {
-            "technician_name": technician_name,
-            "start_time": data.get("start_time"),
-            "end_time_text": end_time_text,
-            "service_type": draft.get("service_type"),
-            "duration_minutes": draft.get("duration_minutes"),
-        },
-    )
+    response_facts = {
+        "technician_name": technician_name,
+        "start_time": data.get("start_time"),
+        "end_time_text": end_time_text,
+        "service_type": draft.get("service_type"),
+        "duration_minutes": draft.get("duration_minutes"),
+    }
     completed = {
         "draft": draft,
         "selected_option": booking.get("selected_option"),
@@ -732,10 +764,10 @@ async def booking_complete_node(state: AgentState) -> AgentState:
         {
             "last_completed_booking": completed,
             "tool_results": state.get("tool_results", {}),
-            "final_response": reply,
+            **_booking_response("booking_success", response_facts, "booking_created"),
         }
     )
-    return append_assistant_message(update, reply)
+    return update
 
 
 async def booking_failed_node(state: AgentState) -> AgentState:
@@ -761,23 +793,20 @@ async def booking_failed_node(state: AgentState) -> AgentState:
     else:
         body = "抱歉，当前预约流程没有完成。请重新告诉我您想预约的时间、项目和技师偏好。"
 
-    reply = await composer.areply(
-        "booking_failed",
-        {
-            "body": body,
-            "agent_label": "预约机器人",
-            "draft": booking.get("draft") or {},
-            "match_result": match_result,
-            "guard_result": guard_result,
-            "create_result": create_result,
-        },
-        {"user_input": last_user_text(state)},
-    )
+    return {
+        "booking": booking,
+        **_booking_response(
+            "booking_failed",
+            {
+                "body": body,
+                "agent_label": "预约机器人",
+                "draft": booking.get("draft") or {},
+                "match_result": match_result,
+                "guard_result": guard_result,
+                "create_result": create_result,
+            },
+            "booking_failed",
+        ),
+    }
 
-    return append_assistant_message(
-        {
-            "booking": booking,
-            "final_response": reply,
-        },
-        reply,
-    )
+

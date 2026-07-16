@@ -1,6 +1,6 @@
-"""State schema for the 3.0 supervisor and specialist subgraphs.
+﻿"""State schema for the 3.0 supervisor and specialist subgraphs.
 
-The supervisor owns session-level routing and handoff facts. Specialist
+The supervisor owns session-level planning and routing facts. Specialist
 subgraphs own their private business state and expose structured results back
 to the supervisor.
 """
@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
-from agents.understanding.schemas import default_task_frame
+from agents.shared.context_schema import default_focus_context
+from agents.supervisor.planning.plan_schema import default_execution_plan
+from agents.understander.schemas import default_task_frame
 
 
 class SupervisorState(TypedDict, total=False):
@@ -32,10 +34,13 @@ class SupervisorState(TypedDict, total=False):
     booking: Dict[str, Any]
     recommendation: Dict[str, Any]
     task_frame: Dict[str, Any]
+    execution_plan: Dict[str, Any]
 
     route_decision: Optional[Dict[str, Any]]
-    handoff_payload: Dict[str, Any]
     last_agent_result: Optional[Dict[str, Any]]
+    turn_results: List[Dict[str, Any]]
+    turn_trace: Optional[Dict[str, Any]]
+    trace_history: List[Dict[str, Any]]
     last_completed_booking: Optional[Dict[str, Any]]
 
     final_response: Optional[str]
@@ -45,16 +50,7 @@ class SupervisorState(TypedDict, total=False):
 
 def default_shared_focus_context() -> Dict[str, Any]:
     """Create cross-subgraph context describing what the user is discussing."""
-    return {
-        "service_type": None,
-        "start_time": None,
-        "duration_minutes": None,
-        "gender_preference": None,
-        "technician_name": None,
-        "technician_id": None,
-        "preference": None,
-        "last_offer": None,
-    }
+    return default_focus_context()
 
 
 def default_consultation_state() -> Dict[str, Any]:
@@ -95,6 +91,8 @@ def default_recommendation_state() -> Dict[str, Any]:
         "candidate_recommendations": [],
         "selected_recommendation": None,
         "alternative_recommendations": [],
+        "selected_service_recommendation": None,
+        "alternative_service_recommendations": [],
         "preference": None,
         "recommendation_reason": None,
         "confidence": None,
@@ -114,9 +112,12 @@ def ensure_supervisor_defaults(state: SupervisorState) -> SupervisorState:
     state.setdefault("booking", default_booking_state())
     state.setdefault("recommendation", default_recommendation_state())
     state.setdefault("task_frame", default_task_frame())
+    state.setdefault("execution_plan", default_execution_plan())
     state.setdefault("route_decision", None)
-    state.setdefault("handoff_payload", {})
     state.setdefault("last_agent_result", None)
+    state.setdefault("turn_results", [])
+    state.setdefault("turn_trace", None)
+    state.setdefault("trace_history", [])
     state.setdefault("last_completed_booking", None)
     state.setdefault("final_response", None)
     state.setdefault("error", None)
@@ -143,7 +144,11 @@ def state_for_agent_actions(state: SupervisorState) -> Dict[str, Any]:
         "booking": dict(state.get("booking") or default_booking_state()),
         "recommendation": dict(state.get("recommendation") or default_recommendation_state()),
         "task_frame": dict(state.get("task_frame") or default_task_frame()),
+        "execution_plan": dict(state.get("execution_plan") or default_execution_plan()),
         "route_decision": state.get("route_decision"),
+        "turn_results": list(state.get("turn_results") or []),
+        "turn_trace": state.get("turn_trace"),
+        "trace_history": list(state.get("trace_history") or []),
         "last_completed_booking": state.get("last_completed_booking"),
         "final_response": state.get("final_response"),
         "error": state.get("error"),
@@ -154,12 +159,6 @@ def state_for_agent_actions(state: SupervisorState) -> Dict[str, Any]:
 def merge_agent_action_update(state: SupervisorState, update: Dict[str, Any]) -> SupervisorState:
     """Merge a specialist action update into the 3.0 supervisor state shape."""
     merged: SupervisorState = {}
-    pending_responses = list(
-        ((state.get("tool_results") or {}).get("query_first_intermediate_responses") or [])
-    )
-    merged_final_response = update.get("final_response")
-    if merged_final_response and pending_responses:
-        merged_final_response = "\n\n".join([*pending_responses, merged_final_response])
     if "focus_context" in update:
         merged["shared_focus_context"] = update["focus_context"]
     if "availability_result" in update:
@@ -181,25 +180,26 @@ def merge_agent_action_update(state: SupervisorState, update: Dict[str, Any]) ->
         merged["recommendation"] = update["recommendation"]
     if "task_frame" in update:
         merged["task_frame"] = update["task_frame"]
+    if "execution_plan" in update:
+        merged["execution_plan"] = update["execution_plan"]
     if "route_decision" in update:
         merged["route_decision"] = update["route_decision"]
+    if "last_agent_result" in update:
+        merged["last_agent_result"] = update["last_agent_result"]
+    if "turn_results" in update:
+        merged["turn_results"] = list(update.get("turn_results") or [])
+    if "turn_trace" in update:
+        merged["turn_trace"] = update["turn_trace"]
+    if "trace_history" in update:
+        merged["trace_history"] = list(update.get("trace_history") or [])
     if "last_completed_booking" in update:
         merged["last_completed_booking"] = update["last_completed_booking"]
     if "final_response" in update:
-        merged["final_response"] = merged_final_response
+        merged["final_response"] = update.get("final_response")
     if "error" in update:
         merged["error"] = update["error"]
     if "tool_results" in update:
         merged["tool_results"] = update["tool_results"]
-    if pending_responses and merged_final_response:
-        merged["tool_results"] = {
-            **(state.get("tool_results") or {}),
-            **(merged.get("tool_results") or {}),
-            "query_first_intermediate_responses": [],
-        }
     if "messages" in update:
-        if pending_responses and merged_final_response:
-            merged["messages"] = [AIMessage(content=merged_final_response)]
-        else:
-            merged["messages"] = update["messages"]
+        merged["messages"] = update["messages"]
     return merged

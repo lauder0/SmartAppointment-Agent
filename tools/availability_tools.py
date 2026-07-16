@@ -12,6 +12,10 @@ from services.availability_service import AvailabilityService
 from .schemas import QueryAvailabilityInput, tool_result
 
 
+def _tool_result(*args, **kwargs) -> dict:
+    return tool_result(*args, tool_name="query_availability", **kwargs)
+
+
 def _serialize_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return time_config.format_datetime(value)
@@ -49,7 +53,7 @@ def query_availability(text: str, base_criteria: Dict[str, Any] | None = None) -
         )
         answer = service.answer_availability_query(text, base_criteria)
         available_names = service.extract_available_technician_names(answer)
-        return tool_result(
+        return _tool_result(
             True,
             data={
                 "answer": answer,
@@ -59,4 +63,4 @@ def query_availability(text: str, base_criteria: Dict[str, Any] | None = None) -
             message="实时排班查询成功",
         )
     except Exception as e:
-        return tool_result(False, data={"text": text}, message="实时排班查询失败", error=str(e))
+        return _tool_result(False, data={"text": text}, message="实时排班查询失败", error=str(e))
