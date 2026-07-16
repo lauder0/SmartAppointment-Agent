@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# Local project notes
+MATURE_AGENT_LAYER_FRAMEWORK.md
+MULTI_AGENT_REFACTOR_PLAN.md
+
 # Python virtual environments
 .venv/
 venv/
