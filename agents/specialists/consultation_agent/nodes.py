@@ -1,8 +1,8 @@
-﻿"""Internal nodes for the consultation specialist agent."""
+"""Internal nodes for the consultation specialist agent."""
 
 from __future__ import annotations
 
-from agents.specialists.consultation.actions import knowledge_consult_node
+from agents.specialists.consultation_agent.actions import knowledge_consult_node
 from agents.supervisor.state import (
     SupervisorState,
     merge_agent_action_update,

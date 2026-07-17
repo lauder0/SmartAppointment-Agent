@@ -68,6 +68,41 @@ class MatchTechnicianInput(BaseModel):
     user_id: Optional[str] = Field(default="default_user", description="user id for preference recall")
 
 
+class EmptyToolInput(BaseModel):
+    pass
+
+
+class CheckTechnicianAvailableInput(BaseModel):
+    technician_id: int = Field(description="technician id")
+    start_time: str = Field(description="appointment start time, YYYY-MM-DD HH:MM")
+    duration_minutes: int = Field(gt=0, description="duration in minutes")
+
+
+class ParseAvailabilitySlotsInput(BaseModel):
+    text: str = Field(description="raw user text")
+
+
+class RecallPreferencesInput(BaseModel):
+    user_id: str = Field(default="default_user", description="user id")
+
+
+class RecommendServiceInput(BaseModel):
+    user_text: str = Field(description="raw user need or symptom text")
+    focus_context: Dict[str, Any] = Field(default_factory=dict, description="shared focus context")
+
+
+class RankTechniciansInput(BaseModel):
+    candidate_options: List[Dict[str, Any]] = Field(default_factory=list, description="verified available candidates")
+    preference: Dict[str, Any] = Field(default_factory=dict, description="parsed recommendation preference")
+    service_type: Optional[str] = Field(default=None, description="service item name")
+    recalled_preferences: Dict[str, Any] = Field(default_factory=dict, description="user preference profile")
+    excluded_technician_ids: List[int] = Field(default_factory=list, description="technician ids to exclude")
+
+
+class GetTechnicianByNameInput(BaseModel):
+    technician_name: str = Field(description="technician name")
+
+
 class CreateAppointmentInput(BaseModel):
     user_id: str = Field(default="default_user", description="user id")
     session_id: str = Field(description="current session id")

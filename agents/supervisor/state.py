@@ -1,4 +1,4 @@
-﻿"""State schema for the 3.0 supervisor and specialist subgraphs.
+"""State schema for the 3.0 supervisor and specialist subgraphs.
 
 The supervisor owns session-level planning and routing facts. Specialist
 subgraphs own their private business state and expose structured results back
@@ -12,7 +12,7 @@ from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
-from agents.shared.context_schema import default_focus_context
+from agents._shared.context_schema import default_focus_context
 from agents.supervisor.planning.plan_schema import default_execution_plan
 from agents.understander.schemas import default_task_frame
 

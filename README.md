@@ -23,7 +23,7 @@
 - `agents/supervisor/`：Supervisor Agent，负责把理解结果转成 `ExecutionPlan`，按计划调用 Specialist，接收结构化结果，并决定继续、等待用户、完成或失败。
 - `agents/specialists/`：领域 Specialist Agents，目前包含咨询、排班、预约、推荐、兜底处理。
 - `agents/response_writer/`：最终回复生成 Agent，统一消费 `execution_plan`、`turn_results`、`shared_focus_context`，避免多个子 Agent 分散回复。
-- `agents/shared/`：跨 Agent 共享的状态、上下文、槽位和节点工具，不属于某个具体业务 Agent，但被多个 Agent 复用。
+- `agents/_shared/`：跨 Agent 共享的状态、上下文、槽位和节点工具，不属于某个具体业务 Agent，但被多个 Agent 复用。
 - `tools/`：稳定业务工具边界，封装知识库、排班、预约、技师、用户行为等服务调用。
 - `services/` / `db/`：业务服务层和数据库访问层。
 - `web/` / `api/`：Web 页面与 FastAPI 接口入口。
@@ -39,13 +39,13 @@ Smart-Appointment/
       planning/
       orchestration/
     specialists/
-      consultation/
-      availability/
-      booking/
-      recommendation/
-      fallback/
+      consultation_agent/
+      availability_agent/
+      booking_agent/
+      recommendation_agent/
+      fallback_agent/
     response_writer/
-    shared/
+    _shared/
   api/
   config/
   db/
@@ -153,3 +153,10 @@ ENABLE_RESPONSE_WRITER_LLM=false
 - Booking Agent 是唯一可以推进预约确认、guard 和写库的业务 Agent。
 - Recommendation Agent 可以做项目推荐、技师推荐、换一个、选择推荐承接，但不直接创建预约。
 - Response Writer 统一组织最终回复，避免多个 Agent 各自输出用户可见文本。
+
+## 2026-07-16 ??????
+
+- Agent ???????????? Agent ?????? `agents/_shared/`????????? `agents/specialists/*_agent/` ???
+- Supervisor ?????? `agents/supervisor/planning/` ? `agents/supervisor/orchestration/`?Plan ?? Supervisor?????? `contracts/`?
+- ??????? `API -> Supervisor/Agents -> Tools -> Services -> DB` ???Agent ????? Service?Service/DB ????? Agent ? Tool?
+- `contracts/` ????????????????????????? contracts?

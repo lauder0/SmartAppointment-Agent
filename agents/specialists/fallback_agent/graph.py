@@ -1,8 +1,8 @@
-﻿"""Fallback and clarification specialist adapter."""
+"""Fallback and clarification specialist adapter."""
 
 from __future__ import annotations
 
-from agents.specialists.fallback.actions import clarification_node, unsupported_node
+from agents.specialists.fallback_agent.actions import clarification_node, unsupported_node
 from agents.supervisor.state import SupervisorState, merge_agent_action_update, state_for_agent_actions
 
 from agents.specialists.result_contract import agent_result, attach_agent_result

@@ -4,16 +4,16 @@ import asyncio
 
 from langchain_core.messages import HumanMessage
 
-import agents.specialists.booking.graph as booking_graph
+import agents.specialists.booking_agent.graph as booking_graph
 from agents.specialists.result_contract import agent_result
-from agents.specialists.booking.result_contract import (
+from agents.specialists.booking_agent.result_contract import (
     BOOKING_RESULT_CONTRACT_VERSION,
     booking_contract_to_specialist_result,
     build_booking_result_contract,
 )
-from agents.supervisor.nodes import supervisor_entry_node, supervisor_router_node
-from agents.supervisor.nodes import supervisor_continue_node
-from agents.supervisor.response_node import supervisor_response_node
+from agents.supervisor.orchestration.nodes import supervisor_entry_node, supervisor_router_node
+from agents.supervisor.orchestration.nodes import supervisor_continue_node
+from agents.supervisor.orchestration.response import supervisor_response_node
 from agents.supervisor.orchestration.routing import route_after_agent_result
 from agents.supervisor.orchestration.routing import route_supervisor_decision
 from agents.supervisor.state import (
@@ -61,7 +61,7 @@ def test_entry_initializes_3_0_state_containers():
 
 
 def test_entry_resets_turn_results_for_each_user_turn():
-    state = _state("浣犲ソ")
+    state = _state("浣犲�?)
     state["turn_results"] = [{"agent_name": "consultation", "result_type": "old"}]
 
     update = asyncio.run(supervisor_entry_node(state))
@@ -74,7 +74,7 @@ def test_specialist_result_contract_contains_supervisor_fields():
         "availability",
         "completed",
         "availability_result",
-        "这里是排班结果。",
+        "这里是排班结果�?,
         {"availability": {"status": "completed"}},
     )
 
@@ -94,27 +94,27 @@ def test_booking_subgraph_returns_structured_confirmation_contract(monkeypatch):
                     "service_type": "鍏ㄨ韩鎺ㄦ嬁",
                     "start_time": "2026-07-16 15:00",
                     "duration_minutes": 60,
-                    "technician_name": "鐜嬪己",
+                    "technician_name": "鐜嬪�?,
                     "technician_id": 1,
                 },
                 "missing_fields": [],
                 "selected_option": {
                     "technician_id": 1,
-                    "technician_name": "鐜嬪己",
+                    "technician_name": "鐜嬪�?,
                 },
             },
             "result_type": "booking_confirmation",
             "response_type": "booking_confirmation",
             "response_facts": {
-                "time_line": "2026骞?7鏈?6鏃?15:00-16:00",
+                "time_line": "2026�?7�?6�?15:00-16:00",
                 "service_type": "鍏ㄨ韩鎺ㄦ嬁",
                 "duration_minutes": 60,
-                "technician_name": "鐜嬪己",
+                "technician_name": "鐜嬪�?,
             },
         }
 
     monkeypatch.setattr(booking_graph, "run_booking_flow", fake_run_booking_flow)
-    state = _state("就他吧")
+    state = _state("就他�?)
     state["route_decision"] = {"action": "select_recommended_technician"}
 
     result = asyncio.run(booking_graph.booking_subgraph_node(state))
@@ -129,7 +129,7 @@ def test_booking_subgraph_returns_structured_confirmation_contract(monkeypatch):
     assert booking_result["next_expected_user_action"] == "confirm_or_cancel_booking"
     assert booking_result["write_performed"] is False
     assert booking_result["draft_snapshot"]["service_type"] == "鍏ㄨ韩鎺ㄦ嬁"
-    assert booking_result["selected_option"]["technician_name"] == "鐜嬪己"
+    assert booking_result["selected_option"]["technician_name"] == "鐜嬪�?
     assert result["turn_results"][-1]["facts"]["booking_result"]["status"] == "awaiting_confirmation"
 
 
@@ -143,7 +143,7 @@ def test_booking_created_contract_marks_write_and_safety_fields():
         },
         "selected_option": {
             "technician_id": 2,
-            "technician_name": "鏉庡",
+            "technician_name": "鏉庡�?,
         },
         "create_result": {"appointment_id": 99},
     }
@@ -151,7 +151,7 @@ def test_booking_created_contract_marks_write_and_safety_fields():
         "result_type": "booking_created",
         "response_type": "booking_success",
         "response_facts": {
-            "technician_name": "鏉庡",
+            "technician_name": "鏉庡�?,
             "start_time": "2026-07-16 15:00",
             "end_time_text": "15:40",
             "service_type": "鑳岄儴鎺ㄦ嬁",
@@ -190,31 +190,31 @@ def test_booking_created_contract_marks_write_and_safety_fields():
 
 
 def test_supervisor_response_node_publishes_last_agent_result_message():
-    state = _state("查一下排班")
+    state = _state("查一下排�?)
     result = agent_result(
         "availability",
         "completed",
         "availability_result",
-        "这里是排班结果。",
+        "这里是排班结果�?,
     )
     state["last_agent_result"] = result
     state["turn_results"] = [result]
 
     update = asyncio.run(supervisor_response_node(state))
 
-    assert update["final_response"].endswith("这里是排班结果。")
+    assert update["final_response"].endswith("这里是排班结果�?)
     assert update["tool_results"]["supervisor_response"]["published"] is True
     assert update["tool_results"]["supervisor_response"]["result_count"] == 1
     assert update["tool_results"]["supervisor_response"]["writer"]["rendered_result_count"] == 1
 
 
 def test_supervisor_response_composes_query_first_from_turn_results_only():
-    state = _state("先查排班再预约")
+    state = _state("先查排班再预�?)
     availability_result = agent_result(
         "availability",
         "completed",
         "availability_result",
-        "这里是排班查询结果。",
+        "这里是排班查询结果�?,
     )
     booking_result = agent_result(
         "booking",
@@ -223,10 +223,10 @@ def test_supervisor_response_composes_query_first_from_turn_results_only():
         None,
         response_type="booking_confirmation",
         facts={
-            "time_line": "2026骞?7鏈?6鏃?15:00-16:00",
+            "time_line": "2026�?7�?6�?15:00-16:00",
             "service_type": "鍏ㄨ韩鎺ㄦ嬁",
             "duration_minutes": 60,
-            "technician_name": "鐜嬪己",
+            "technician_name": "鐜嬪�?,
         },
     )
     state["turn_results"] = [availability_result, booking_result]
@@ -235,7 +235,7 @@ def test_supervisor_response_composes_query_first_from_turn_results_only():
 
     update = asyncio.run(supervisor_response_node(state))
 
-    assert "这里是排班查询结果。" in update["final_response"]
+    assert "这里是排班查询结果�? in update["final_response"]
     assert "请问是否确认预约" in update["final_response"]
     assert "query_first_intermediate_responses" not in update["tool_results"]
 
@@ -248,7 +248,7 @@ def test_supervisor_routes_knowledge_query_without_llm():
 
 
 def test_supervisor_routes_service_catalog_short_question_without_llm():
-    state = asyncio.run(_route("你们有什么项目"))
+    state = asyncio.run(_route("你们有什么项�?))
 
     assert state["active_agent"] == "consultation"
     assert state["route_decision"]["action"] == "answer_knowledge"
@@ -356,7 +356,7 @@ def test_booking_confirmation_context_overrides_generic_confirmation():
 
 
 def test_knowledge_plus_booking_uses_query_first_plan():
-    state = _state("你们有哪些服务项目？帮我预约明天下午三点做全身推拿")
+    state = _state("你们有哪些服务项目？帮我预约明天下午三点做全身推�?)
 
     state.update(asyncio.run(supervisor_entry_node(state)))
     state.update(asyncio.run(supervisor_router_node(state)))
@@ -437,10 +437,10 @@ def test_continue_node_promotes_pending_plan_task_without_stashing_reply():
         "current_task_id": "t1",
         "completed_task_ids": [],
     }
-    result = agent_result("availability", "completed", "availability_result", "这里是排班查询结果。")
+    result = agent_result("availability", "completed", "availability_result", "这里是排班查询结果�?)
     state["last_agent_result"] = result
     state["turn_results"] = [result]
-    state["final_response"] = "这里是排班查询结果。"
+    state["final_response"] = "这里是排班查询结果�?
 
     update = asyncio.run(supervisor_continue_node(state))
 
@@ -452,7 +452,7 @@ def test_continue_node_promotes_pending_plan_task_without_stashing_reply():
 
 
 def test_availability_suggested_next_task_routes_through_supervisor_continue():
-    state = _state("我想做全身推拿，你推荐个技师")
+    state = _state("我想做全身推拿，你推荐个技�?)
     state["route_decision"] = {
         "action": "query_availability",
         "reason": "prepare_candidates_for_recommendation",
@@ -479,7 +479,7 @@ def test_availability_suggested_next_task_routes_through_supervisor_continue():
         "current_task_id": "t1",
         "completed_task_ids": [],
     }
-    state["availability"] = {"options": [{"technician_id": 1, "technician_name": "鐜嬪己"}]}
+    state["availability"] = {"options": [{"technician_id": 1, "technician_name": "鐜嬪�?}]}
     result = agent_result(
         "availability",
         "completed",
@@ -511,7 +511,7 @@ def test_availability_suggested_next_task_routes_through_supervisor_continue():
 
 
 def test_recommendation_non_auto_suggestion_does_not_auto_book():
-    state = _state("推荐一个技师")
+    state = _state("推荐一个技�?)
     state["route_decision"] = {"action": "generate_recommendation"}
     state["execution_plan"] = {
         "plan_id": "plan_contract",
@@ -541,13 +541,13 @@ def test_recommendation_non_auto_suggestion_does_not_auto_book():
         None,
         {"recommendation": {"status": "awaiting_selection"}},
         response_type="technician_recommendation",
-        facts={"recommended_technician": {"technician_name": "鐜嬪己"}},
+        facts={"recommended_technician": {"technician_name": "鐜嬪�?}},
         suggested_next_tasks=[
             {
                 "agent": "booking",
                 "action": "select_recommended_technician",
                 "reason": "recommendation_ready_for_selection",
-                "input": {"selected_recommendation": {"technician_name": "鐜嬪己"}},
+                "input": {"selected_recommendation": {"technician_name": "鐜嬪�?}},
                 "auto_continue": False,
             }
         ],

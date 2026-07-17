@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from agents.supervisor.planning.plan_schema import plan_summary
-
 
 MAX_TRACE_HISTORY = 20
 
@@ -73,7 +71,7 @@ def build_turn_trace(
         "booking_status": (state.get("booking") or {}).get("status"),
         "recommendation_status": (state.get("recommendation") or {}).get("status"),
         "availability_option_count": len((state.get("availability") or {}).get("options") or []),
-        "execution_plan": plan_summary(state.get("execution_plan")),
+        "execution_plan": _plan_summary(state.get("execution_plan")),
         "plan_review": tool_results.get("plan_review"),
         "writer": supervisor_response.get("writer"),
         "turn_results": summarize_turn_results(state.get("turn_results") or []),
@@ -151,6 +149,39 @@ def _compact(value: Any) -> Any:
     if isinstance(value, list):
         return {"type": "list", "count": len(value)}
     return _preview(str(value))
+
+
+def _plan_summary(plan: Dict[str, Any] | None) -> Dict[str, Any]:
+    """Return a trace-safe snapshot without depending on supervisor internals."""
+    plan = plan or {}
+    tasks = plan.get("tasks") or []
+    return {
+        "plan_id": plan.get("plan_id"),
+        "goal": plan.get("goal"),
+        "status": plan.get("status"),
+        "source": plan.get("source"),
+        "current_task_id": plan.get("current_task_id"),
+        "completed_task_ids": list(plan.get("completed_task_ids") or []),
+        "waiting_task_id": plan.get("waiting_task_id"),
+        "requires_user_input": plan.get("requires_user_input", False),
+        "next_expected_user_action": plan.get("next_expected_user_action"),
+        "completion_reason": plan.get("completion_reason"),
+        "suggested_task_reviews": list(plan.get("suggested_task_reviews") or []),
+        "tasks": [
+            {
+                "task_id": task.get("task_id"),
+                "agent": task.get("agent"),
+                "action": task.get("action"),
+                "status": task.get("status"),
+                "depends_on": list(task.get("depends_on") or []),
+                "required": task.get("required", True),
+                "reason": task.get("reason"),
+                "result_ref": task.get("result_ref"),
+            }
+            for task in tasks
+            if isinstance(task, dict)
+        ],
+    }
 
 
 def _preview(value: Any, max_length: int = 180) -> str | None:

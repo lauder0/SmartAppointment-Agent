@@ -1,4 +1,4 @@
-﻿"""Consultation and availability graph nodes."""
+"""Consultation and availability graph nodes."""
 
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ from agents.understander.rules import (
     is_service_recommendation_request,
     is_technician_info_question,
 )
-from agents.specialists.consultation.response_generator import ResponseGenerator
-from agents.shared.node_utils import (
+from agents.specialists.consultation_agent.response_generator import ResponseGenerator
+from agents._shared.node_utils import (
     last_user_text,
     merge_focus_context,
 )
-from agents.shared.slot_utils import default_duration_for_service
-from agents.shared.state import AgentState
+from agents._shared.slot_utils import default_duration_for_service
+from agents._shared.state import AgentState
 from tools.knowledge_tools import search_knowledge
 
 

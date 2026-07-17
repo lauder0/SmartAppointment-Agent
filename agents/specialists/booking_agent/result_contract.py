@@ -1,4 +1,4 @@
-﻿"""Structured Booking result contract.
+"""Structured Booking result contract.
 
 Booking owns side-effecting appointment creation, so its graph output needs a
 stable contract before Supervisor publishes any user-facing response.

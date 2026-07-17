@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Dict, List, Set
 
-from agents.shared.slot_utils import default_duration_for_service
+from agents._shared.slot_utils import default_duration_for_service
 
 from .schemas import IntentSignal, LLMPlan, TaskFrame, UnderstandingResult, compact_slots, default_task_frame, now_iso
 

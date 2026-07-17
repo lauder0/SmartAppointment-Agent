@@ -1,4 +1,4 @@
-ï»¿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import timedelta
 import unittest
@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from langchain_core.messages import HumanMessage
 
-from agents.specialists.booking.actions import (
+from agents.specialists.booking_agent.actions import (
     booking_match_node,
     booking_parse_node,
     booking_guard_node,
@@ -14,8 +14,8 @@ from agents.specialists.booking.actions import (
     booking_confirmation_prompt_node,
     booking_missing_node,
 )
-from agents.specialists.consultation.actions import knowledge_consult_node
-from agents.supervisor.router_actions import main_router_node
+from agents.specialists.consultation_agent.actions import knowledge_consult_node
+from agents.supervisor.orchestration.understanding import main_router_node
 from config.time_config import time_config
 
 
@@ -23,7 +23,7 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_service_catalog_short_question_returns_catalog_without_llm(self):
         result = await knowledge_consult_node(
             {
-                "messages": [HumanMessage(content="ä½ ä»¬æœ‰ä»€ä¹ˆé¡¹ç›®")],
+                "messages": [HumanMessage(content="ÄãÃÇÓĞÊ²Ã´ÏîÄ¿")],
                 "focus_context": {},
             }
         )
@@ -43,22 +43,22 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
                 pass
 
             async def generate_response(self, _user_input, _docs):
-                return "é’ˆå¯¹è…°é…¸èƒŒç—›ï¼Œæ¨èã€èƒŒéƒ¨æ¨æ‹¿ã€‘ï¼Œæ—¶é•¿40åˆ†é’Ÿã€‚"
+                return "Õë¶ÔÑüËá±³Í´£¬ÍÆ¼ö¡¾±³²¿ÍÆÄÃ¡¿£¬Ê±³¤40·ÖÖÓ¡£"
 
         with (
-            patch("agents.specialists.consultation.actions.search_knowledge", FakeSearchKnowledge()),
-            patch("agents.specialists.consultation.actions.ResponseGenerator", FakeResponseGenerator),
-            patch("agents.specialists.consultation.actions.create_chat_model", lambda temperature=0.3: object()),
+            patch("agents.specialists.consultation_agent.actions.search_knowledge", FakeSearchKnowledge()),
+            patch("agents.specialists.consultation_agent.actions.ResponseGenerator", FakeResponseGenerator),
+            patch("agents.specialists.consultation_agent.actions.create_chat_model", lambda temperature=0.3: object()),
         ):
             result = await knowledge_consult_node(
                 {
-                    "messages": [HumanMessage(content="æˆ‘è…°é…¸èƒŒç—›ï¼Œä½ æœ‰ä»€ä¹ˆæ¨èçš„é¡¹ç›®å—")],
+                    "messages": [HumanMessage(content="ÎÒÑüËá±³Í´£¬ÄãÓĞÊ²Ã´ÍÆ¼öµÄÏîÄ¿Âğ")],
                     "focus_context": {},
                     "route_decision": {"task_type": "service_recommendation"},
                 }
             )
 
-        self.assertEqual(result["focus_context"]["service_type"], "èƒŒéƒ¨æ¨æ‹¿")
+        self.assertEqual(result["focus_context"]["service_type"], "±³²¿ÍÆÄÃ")
         self.assertEqual(result["focus_context"]["duration_minutes"], 40)
         self.assertEqual(result["focus_context"]["last_offer"], "service_recommendation")
 
@@ -72,40 +72,40 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
 
             def parse_data(self, content):
                 return {
-                    "start_time": "æœªçŸ¥",
-                    "duration": "æœªçŸ¥",
-                    "project": "æœªçŸ¥",
-                    "gender": "æœªçŸ¥",
-                    "preference": "æœªçŸ¥",
-                    "technician_name": "æœªçŸ¥",
+                    "start_time": "Î´Öª",
+                    "duration": "Î´Öª",
+                    "project": "Î´Öª",
+                    "gender": "Î´Öª",
+                    "preference": "Î´Öª",
+                    "technician_name": "Î´Öª",
                 }
 
-        class FakeRecall:
-            def recall(self, user_id):
-                return {"preferred_technician_name": "èµµæ•"}
+        class FakeRecallTool:
+            def invoke(self, payload):
+                return {"success": True, "data": {"profile": {"preferred_technician_name": "??"}}}
 
         state = {
-            "messages": [HumanMessage(content="æˆ‘æƒ³æ¢ä¸€ä¸ªæŠ€å¸ˆ")],
+            "messages": [HumanMessage(content="ÎÒÏë»»Ò»¸ö¼¼Ê¦")],
             "booking": {
                 "status": "awaiting_confirmation",
                 "draft": {
-                    "service_type": "å…¨èº«æ¨æ‹¿",
+                    "service_type": "È«ÉíÍÆÄÃ",
                     "start_time": "2026-06-11 10:00",
                     "duration_minutes": 60,
-                    "gender_preference": "å¥³",
-                    "technician_name": "èµµæ•",
+                    "gender_preference": "Å®",
+                    "technician_name": "ÕÔÃô",
                 },
                 "selected_option": {
                     "technician_id": 4,
-                    "technician_name": "èµµæ•",
+                    "technician_name": "ÕÔÃô",
                 },
             },
         }
 
         with (
-            patch("agents.specialists.booking.actions.InputParser", FakeParser),
-            patch("agents.specialists.booking.actions.create_chat_model", lambda temperature=0: object()),
-            patch("agents.specialists.booking.actions.PreferenceRecallService", lambda: FakeRecall()),
+            patch("agents.specialists.booking_agent.actions.InputParser", FakeParser),
+            patch("agents.specialists.booking_agent.actions.create_chat_model", lambda temperature=0: object()),
+            patch("agents.specialists.booking_agent.actions.recall_preferences_tool", FakeRecallTool()),
         ):
             result = await booking_parse_node(state)
 
@@ -125,7 +125,7 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
                     "success": True,
                     "data": {
                         "match_type": "direct",
-                        "technician": {"id": 3, "name": "æå¨œ", "gender": "å¥³"},
+                        "technician": {"id": 3, "name": "ÀîÄÈ", "gender": "Å®"},
                     },
                 }
 
@@ -133,26 +133,26 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
             "booking": {
                 "status": "draft_ready",
                 "draft": {
-                    "service_type": "å…¨èº«æ¨æ‹¿",
+                    "service_type": "È«ÉíÍÆÄÃ",
                     "start_time": "2026-06-11 10:00",
                     "duration_minutes": 60,
-                    "gender_preference": "å¥³",
+                    "gender_preference": "Å®",
                 },
                 "excluded_technician_ids": [4],
             }
         }
 
-        with patch("agents.specialists.booking.actions.match_technician", FakeMatchTool()):
+        with patch("agents.specialists.booking_agent.actions.match_technician", FakeMatchTool()):
             result = await booking_match_node(state)
 
         self.assertEqual(captured["excluded_technician_ids"], [4])
-        self.assertEqual(result["booking"]["selected_option"]["technician_name"], "æå¨œ")
+        self.assertEqual(result["booking"]["selected_option"]["technician_name"], "ÀîÄÈ")
 
     async def test_booking_missing_node_keeps_drafting_and_asks(self):
         state = {
             "booking": {
                 "status": "drafting",
-                "draft": {"service_type": "æŒ‰æ‘©"},
+                "draft": {"service_type": "°´Ä¦"},
                 "missing_fields": ["start_time", "duration", "gender"],
             }
         }
@@ -162,7 +162,7 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["booking"]["status"], "drafting")
         self.assertEqual(result["booking"]["missing_fields"], ["start_time", "duration", "gender"])
         self.assertEqual(result["response_type"], "booking_missing_slots")
-        self.assertIn("é¢„çº¦çš„æ—¶é—´", result["response_facts"]["body"])
+        self.assertIn("Ô¤Ô¼µÄÊ±¼ä", result["response_facts"]["body"])
         self.assertNotIn("final_response", result)
         self.assertNotIn("messages", result)
 
@@ -176,32 +176,32 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
 
             def parse_data(self, content):
                 return {
-                    "start_time": "æœªçŸ¥",
-                    "duration": "æœªçŸ¥",
-                    "project": "å…¨èº«æ¨æ‹¿",
-                    "gender": "å¥³",
-                    "preference": "æœªçŸ¥",
-                    "technician_name": "æœªçŸ¥",
+                    "start_time": "Î´Öª",
+                    "duration": "Î´Öª",
+                    "project": "È«ÉíÍÆÄÃ",
+                    "gender": "Å®",
+                    "preference": "Î´Öª",
+                    "technician_name": "Î´Öª",
                 }
 
-        class FakeRecall:
-            def recall(self, user_id):
-                return {}
+        class FakeRecallTool:
+            def invoke(self, payload):
+                return {"success": True, "data": {"profile": {}}}
 
         state = {
-            "messages": [HumanMessage(content="æˆ‘æƒ³åšå…¨èº«æ¨æ‹¿ï¼Œå¥³æŠ€å¸ˆ")],
+            "messages": [HumanMessage(content="ÎÒÏë×öÈ«ÉíÍÆÄÃ£¬Å®¼¼Ê¦")],
             "booking": {"status": "idle", "draft": {}},
         }
 
         with (
-            patch("agents.specialists.booking.actions.InputParser", FakeParser),
-            patch("agents.specialists.booking.actions.create_chat_model", lambda temperature=0: object()),
-            patch("agents.specialists.booking.actions.PreferenceRecallService", lambda: FakeRecall()),
+            patch("agents.specialists.booking_agent.actions.InputParser", FakeParser),
+            patch("agents.specialists.booking_agent.actions.create_chat_model", lambda temperature=0: object()),
+            patch("agents.specialists.booking_agent.actions.recall_preferences_tool", FakeRecallTool()),
         ):
             result = await booking_parse_node(state)
 
         draft = result["booking"]["draft"]
-        self.assertEqual(draft["service_type"], "å…¨èº«æ¨æ‹¿")
+        self.assertEqual(draft["service_type"], "È«ÉíÍÆÄÃ")
         self.assertEqual(draft["duration_minutes"], 60)
         self.assertNotIn("duration", result["booking"]["missing_fields"])
         self.assertEqual(result["booking"]["slot_sources"]["duration_minutes"], "service_catalog_default")
@@ -211,13 +211,13 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
             "booking": {
                 "status": "matched",
                 "draft": {
-                    "service_type": "èƒŒéƒ¨æ¨æ‹¿",
+                    "service_type": "±³²¿ÍÆÄÃ",
                     "start_time": "2026-06-10 15:00",
                     "duration_minutes": 40,
                 },
                 "selected_option": {
                     "technician_id": 3,
-                    "technician_name": "æå¨œ",
+                    "technician_name": "ÀîÄÈ",
                 },
             }
         }
@@ -226,24 +226,24 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["booking"]["status"], "awaiting_confirmation")
         self.assertEqual(result["response_type"], "booking_confirmation")
-        self.assertEqual(result["response_facts"]["technician_name"], "æå¨œ")
-        self.assertIn("2026å¹´06æœˆ10æ—¥ 15:00", result["response_facts"]["time_line"])
+        self.assertEqual(result["response_facts"]["technician_name"], "ÀîÄÈ")
+        self.assertIn("2026Äê06ÔÂ10ÈÕ 15:00", result["response_facts"]["time_line"])
         self.assertNotIn("final_response", result)
 
     async def test_booking_confirmation_confirm_sets_confirmed_without_writing(self):
         state = {
-            "messages": [HumanMessage(content="ç¡®è®¤")],
+            "messages": [HumanMessage(content="È·ÈÏ")],
             "route_decision": {"action": "confirm_booking"},
             "booking": {
                 "status": "awaiting_confirmation",
                 "draft": {
-                    "service_type": "æŒ‰æ‘©",
+                    "service_type": "°´Ä¦",
                     "start_time": "2026-06-10 15:00",
                     "duration_minutes": 60,
                 },
                 "selected_option": {
                     "technician_id": 1,
-                    "technician_name": "å¼ ä¼Ÿ",
+                    "technician_name": "ÕÅÎ°",
                 },
             },
         }
@@ -255,15 +255,15 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_booking_confirmation_cancel_resets_active_context(self):
         state = {
-            "messages": [HumanMessage(content="å–æ¶ˆ")],
+            "messages": [HumanMessage(content="È¡Ïû")],
             "route_decision": {"action": "cancel_booking"},
             "booking": {
                 "status": "awaiting_confirmation",
-                "draft": {"service_type": "æŒ‰æ‘©"},
-                "selected_option": {"technician_id": 1, "technician_name": "å¼ ä¼Ÿ"},
+                "draft": {"service_type": "°´Ä¦"},
+                "selected_option": {"technician_id": 1, "technician_name": "ÕÅÎ°"},
             },
             "availability_result": {"criteria_snapshot": {"duration_minutes": 60}},
-            "focus_context": {"service_type": "æŒ‰æ‘©"},
+            "focus_context": {"service_type": "°´Ä¦"},
         }
 
         result = await booking_confirmation_node(state)
@@ -335,13 +335,13 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_service_selection_after_availability_starts_booking(self):
         state = {
-            "messages": [HumanMessage(content="æˆ‘æƒ³è¦åšå…¨èº«æ¨æ‹¿")],
+            "messages": [HumanMessage(content="ÎÒÏëÒª×öÈ«ÉíÍÆÄÃ")],
             "availability_result": {
                 "criteria_snapshot": {
                     "start_time": "2026-06-10 15:00",
-                    "gender": "å¥³",
+                    "gender": "Å®",
                 },
-                "options": [{"technician_name": "æå¨œ"}],
+                "options": [{"technician_name": "ÀîÄÈ"}],
             },
             "booking": {"status": "idle"},
         }
@@ -353,10 +353,10 @@ class GraphNodeContractTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_duration_service_refinement_after_availability_stays_availability(self):
         state = {
-            "messages": [HumanMessage(content="æˆ‘æƒ³è¦2å°æ—¶å…¨èº«æŒ‰æ‘©")],
+            "messages": [HumanMessage(content="ÎÒÏëÒª2Ğ¡Ê±È«Éí°´Ä¦")],
             "availability_result": {
                 "criteria_snapshot": {"start_time": "2026-06-11 15:00"},
-                "options": [{"technician_name": "æå¨œ"}],
+                "options": [{"technician_name": "ÀîÄÈ"}],
             },
             "booking": {"status": "idle"},
         }

@@ -6,7 +6,7 @@ import re
 from typing import Any, Dict
 
 from config.time_config import time_config
-from services.availability_service import AvailabilityService
+from tools.availability_rule_tools import parse_query_criteria
 
 from .schemas import NormalizedInput, compact_slots
 
@@ -15,8 +15,7 @@ def normalize_user_input(user_text: str) -> NormalizedInput:
     """Normalize text and extract directly observable candidate slots."""
     raw_text = user_text or ""
     normalized_text = _normalize_text(raw_text)
-    availability_service = AvailabilityService()
-    criteria = availability_service.parse_query_criteria(raw_text)
+    criteria = parse_query_criteria(raw_text)
     candidate_slots: Dict[str, Any] = {
         "service_type": criteria.get("service_type"),
         "start_time": _serialize_datetime(criteria.get("start_time")),

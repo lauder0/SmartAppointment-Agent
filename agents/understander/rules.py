@@ -1,8 +1,8 @@
 """Deterministic context rules used before the LLM router.
 
-These helpers answer "what does this utterance mean in the current state?"
-They intentionally handle stable business expressions and leave fuzzy cases to
-the existing LLM classifier.
+The understander owns lightweight text rules. When a rule needs business
+parsing, it goes through the tools layer so the dependency direction remains:
+Agent -> Tool -> Service.
 """
 
 from __future__ import annotations
@@ -10,7 +10,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-from services.availability_service import AvailabilityIntent, AvailabilityService
+from tools.availability_rule_tools import (
+    AvailabilityIntent,
+    classify_availability_intent_by_rules,
+    is_availability_follow_up as _is_availability_follow_up,
+    is_clear_appointment_start as _is_clear_appointment_start,
+    is_formal_booking_request as _is_formal_booking_request,
+    parse_query_criteria,
+    parse_service_type,
+)
 
 
 @dataclass(frozen=True)
@@ -28,44 +36,18 @@ class RuleMatch:
 GREETING_TERMS = {"你好", "您好", "嗨", "hi", "hello", "hey", "哈喽", "在吗", "您好呀", "你好呀"}
 COURTESY_TERMS = {"谢谢", "感谢", "多谢", "好的谢谢", "谢谢你", "先这样", "我先看看", "好的我看看"}
 
-KNOWLEDGE_KEYWORDS = [
-    "有哪些服务",
-    "有什么服务",
-    "服务项目",
-    "有哪些项目",
-    "有什么项目",
-    "都有什么项目",
-    "服务有哪些",
-    "项目有哪些",
-    "项目介绍",
-    "价格",
-    "多少钱",
-    "收费",
-    "营业时间",
-    "几点开门",
-    "地址",
-    "在哪里",
-    "会员",
-    "优惠",
-    "怎么预约",
-    "预约流程",
-    "技师介绍",
-]
-
 SERVICE_CATALOG_QUESTION_KEYWORDS = [
-    "有哪些服务",
     "有什么服务",
+    "有哪些服务",
     "服务项目",
-    "都有什么项目",
-    "有哪些项目",
     "有什么项目",
-    "服务有哪些",
-    "项目有哪些",
-    "按摩项目",
-    "推拿项目",
+    "有哪些项目",
+    "都有什么项目",
     "服务清单",
     "项目清单",
     "价目表",
+    "按摩项目",
+    "推拿项目",
 ]
 
 PRICE_QUESTION_KEYWORDS = [
@@ -77,7 +59,6 @@ PRICE_QUESTION_KEYWORDS = [
     "怎么收费",
     "如何收费",
     "贵不贵",
-    "价目",
     "单价",
     "一次多少钱",
     "一小时多少钱",
@@ -100,9 +81,10 @@ HOURS_QUESTION_KEYWORDS = [
 LOCATION_QUESTION_KEYWORDS = [
     "地址",
     "位置",
-    "在哪里",
     "在哪",
     "在哪儿",
+    "在哪里",
+    "哪儿",
     "哪里",
     "怎么走",
     "怎么去",
@@ -114,29 +96,8 @@ LOCATION_QUESTION_KEYWORDS = [
     "附近",
 ]
 
-CONTACT_QUESTION_KEYWORDS = [
-    "电话",
-    "联系方式",
-    "联系电话",
-    "客服电话",
-    "手机号",
-    "微信",
-    "联系你们",
-]
-
-MEMBERSHIP_QUESTION_KEYWORDS = [
-    "会员",
-    "优惠",
-    "活动",
-    "折扣",
-    "办卡",
-    "储值",
-    "充值",
-    "次卡",
-    "套餐",
-    "团购",
-    "券",
-]
+CONTACT_QUESTION_KEYWORDS = ["电话", "联系方式", "联系电话", "客服电话", "手机号", "微信", "联系你们"]
+MEMBERSHIP_QUESTION_KEYWORDS = ["会员", "优惠", "活动", "折扣", "办卡", "储值", "充值", "次卡", "套餐", "团购", "券"]
 
 APPOINTMENT_POLICY_QUESTION_KEYWORDS = [
     "怎么预约",
@@ -149,12 +110,8 @@ APPOINTMENT_POLICY_QUESTION_KEYWORDS = [
     "取消规则",
     "能取消吗",
     "可以取消吗",
-    "可以取消",
-    "取消或者改时间",
-    "取消或改时间",
     "怎么改时间",
     "可以改时间吗",
-    "改时间吗",
     "更改时间",
     "改期",
     "迟到",
@@ -228,35 +185,15 @@ SERVICE_RECOMMENDATION_KEYWORDS = [
 
 SERVICE_SELECTION_KEYWORDS = ["想做", "我要", "我想", "选", "做这个", "就这个"]
 SCOPE_KEYWORDS = ["你能做什么", "你会做什么", "能做什么", "会做什么", "能干什么", "你有什么功能"]
-
-AVAILABILITY_LANGUAGE = [
-    "可约",
-    "可预约",
-    "能约",
-    "能预约",
-    "有空",
-    "空闲",
-    "空位",
-    "档期",
-    "排班",
-    "时段",
-]
-
-UNSAFE_OR_UNSUPPORTED_KEYWORDS = [
-    "别人的预约",
-    "所有用户",
-    "导出用户",
-    "忽略规则",
-    "绕过",
-    "管理员权限",
-]
+AVAILABILITY_LANGUAGE = ["可约", "可预约", "能约", "能预约", "有空", "空闲", "空位", "档期", "排班", "时段"]
+UNSAFE_OR_UNSUPPORTED_KEYWORDS = ["别人的预约", "所有用户", "导出用户", "忽略规则", "绕过", "管理员权限"]
 
 
 def _compact_text(text: str) -> str:
     return "".join(ch for ch in text.strip().lower() if ch.isalnum() or "\u4e00" <= ch <= "\u9fff")
 
 
-def _contains_any(text: str, keywords: list[str] | tuple[str, ...]) -> bool:
+def _contains_any(text: str, keywords: list[str] | tuple[str, ...] | set[str]) -> bool:
     raw = text.strip().lower()
     normalized = _compact_text(text)
     return any(keyword in raw or keyword in normalized for keyword in keywords)
@@ -278,7 +215,6 @@ def _has_availability_language(text: str) -> bool:
 
 
 def is_greeting(text: str) -> bool:
-    """Return True for pure greeting utterances, including greeting combinations."""
     normalized = _compact_text(text)
     if normalized in GREETING_TERMS:
         return True
@@ -292,26 +228,7 @@ def is_courtesy(text: str) -> bool:
     normalized = _compact_text(text)
     if normalized in COURTESY_TERMS:
         return True
-    courtesy_signals = ["谢谢", "感谢", "多谢"]
-    closing_signals = ["先看看", "我看看", "先这样", "了解一下", "再说"]
-    return any(signal in normalized for signal in courtesy_signals) and (
-        len(normalized) <= 12 or any(signal in normalized for signal in closing_signals)
-    )
-
-
-def is_knowledge_question(text: str) -> bool:
-    return (
-        _contains_any(text, KNOWLEDGE_KEYWORDS)
-        or is_service_catalog_question(text)
-        or is_price_question(text)
-        or is_business_hours_question(text)
-        or is_location_question(text)
-        or is_contact_question(text)
-        or is_membership_question(text)
-        or is_appointment_policy_question(text)
-        or is_service_detail_question(text)
-        or is_technician_info_question(text)
-    )
+    return any(signal in normalized for signal in ("谢谢", "感谢", "多谢")) and len(normalized) <= 12
 
 
 def is_service_catalog_question(text: str) -> bool:
@@ -334,7 +251,7 @@ def is_location_question(text: str) -> bool:
     if any(query in normalized for query in strong_travel_queries):
         return True
     store_subjects = ("你们", "门店", "店", "店铺", "按摩店", "推拿店", "地址", "位置", "地方")
-    location_queries = ("在哪", "在哪里", "在哪儿", "哪里", "位置", "地址", "怎么走", "怎么去", "怎么过去", "导航", "交通", "地铁", "停车")
+    location_queries = ("在哪", "在哪里", "在哪儿", "哪儿", "哪里", "位置", "地址")
     return any(subject in normalized for subject in store_subjects) and any(query in normalized for query in location_queries)
 
 
@@ -360,6 +277,20 @@ def is_technician_info_question(text: str) -> bool:
     return _contains_any(text, TECHNICIAN_INFO_QUESTION_KEYWORDS)
 
 
+def is_knowledge_question(text: str) -> bool:
+    return (
+        is_service_catalog_question(text)
+        or is_price_question(text)
+        or is_business_hours_question(text)
+        or is_location_question(text)
+        or is_contact_question(text)
+        or is_membership_question(text)
+        or is_appointment_policy_question(text)
+        or is_service_detail_question(text)
+        or is_technician_info_question(text)
+    )
+
+
 def is_service_recommendation_request(text: str) -> bool:
     normalized = _compact_text(text)
     if not normalized:
@@ -373,8 +304,7 @@ def is_service_recommendation_request(text: str) -> bool:
 
 
 def is_scope_question(text: str) -> bool:
-    normalized = text.strip()
-    return any(keyword in normalized for keyword in SCOPE_KEYWORDS)
+    return _contains_any(text, SCOPE_KEYWORDS)
 
 
 def is_unsafe_or_unsupported_request(text: str) -> bool:
@@ -382,31 +312,20 @@ def is_unsafe_or_unsupported_request(text: str) -> bool:
 
 
 def is_formal_booking_request(text: str) -> bool:
-    return AvailabilityService.is_formal_booking_request(text)
+    return _is_formal_booking_request(text)
 
 
 def is_modification_request(text: str) -> bool:
     normalized = text.strip()
     if not normalized:
         return False
-    modification_keywords = [
-        "改成",
-        "改到",
-        "换成",
-        "换到",
-        "换一个",
-        "换个",
-        "换技师",
-        "改一下",
-        "换时间",
-        "改时间",
-        "重新选",
-        "重新推荐",
-    ]
-    if any(keyword in normalized for keyword in modification_keywords):
+    if _contains_any(
+        normalized,
+        ("改成", "改到", "换成", "换到", "换一个", "换个", "换技师", "改一个", "换时间", "改时间", "重新选", "重新推荐"),
+    ):
         return True
-    service = AvailabilityService.parse_service_type(normalized)
-    criteria = AvailabilityService().parse_query_criteria(normalized)
+    service = parse_service_type(normalized)
+    criteria = parse_query_criteria(normalized)
     return bool(
         service
         or criteria.get("duration_minutes")
@@ -418,33 +337,21 @@ def is_modification_request(text: str) -> bool:
 
 
 def is_technician_replacement_request(text: str) -> bool:
-    normalized = re.sub(r"[\s，。！？!,.、]+", "", text.strip().lower())
+    normalized = _compact_text(text)
     if not normalized:
         return False
-    replacement_phrases = [
-        "换一个技师",
-        "换个技师",
-        "换一位技师",
-        "换位技师",
-        "换技师",
-        "更换技师",
-        "重新推荐技师",
-        "重新选技师",
-        "换一个师傅",
-        "换个师傅",
-        "换一位师傅",
-    ]
+    replacement_phrases = ("换一个技师", "换个技师", "换一位技师", "换位技师", "换技师", "更换技师", "重新推荐技师", "重新选技师")
     if any(phrase in normalized for phrase in replacement_phrases):
         return True
     return normalized.startswith("换") and ("技师" in normalized or "师傅" in normalized)
 
 
 def is_clear_appointment_start(text: str) -> bool:
-    return AvailabilityService.is_clear_appointment_start(text)
+    return _is_clear_appointment_start(text)
 
 
 def is_availability_refinement(text: str) -> bool:
-    return AvailabilityService().is_availability_follow_up(text)
+    return _is_availability_follow_up(text)
 
 
 def is_recommendation_request(text: str) -> bool:
@@ -457,7 +364,6 @@ def is_recommendation_request(text: str) -> bool:
         "推荐技师",
         "推荐的技师",
         "推荐师傅",
-        "推荐的师傅",
         "推荐一个",
         "推荐一位",
         "帮我推荐",
@@ -478,36 +384,41 @@ def is_recommendation_request(text: str) -> bool:
         "你看着选",
         "随便推荐",
     )
-    preference_signals = (
-        "力气大",
-        "手劲大",
-        "重一点",
-        "轻一点",
-        "温柔一点",
-        "舒缓一点",
-        "按得深",
-        "按透",
-    )
+    preference_signals = ("力气大", "手劲大", "重一点", "轻一点", "温柔一点", "舒缓一点", "按得深", "按透")
     return any(phrase in normalized for phrase in recommendation_phrases) or (
-        any(signal in normalized for signal in preference_signals)
-        and any(word in normalized for word in ("推荐", "选"))
+        any(signal in normalized for signal in preference_signals) and any(word in normalized for word in ("推荐", "选"))
     )
 
 
 def is_recommendation_replacement_request(text: str) -> bool:
     normalized = _compact_text(text)
-    return any(
-        phrase in normalized
-        for phrase in (
-            "换一个",
-            "换一位",
-            "换个推荐",
-            "再推荐一个",
-            "还有别的吗",
-            "下一个",
-            "不要这个",
-        )
-    )
+    return any(phrase in normalized for phrase in ("换一个", "换一位", "换个推荐", "再推荐一个", "还有别的吗", "下一个", "不要这个"))
+
+
+def is_positive_confirmation(text: str) -> bool:
+    normalized = _compact_text(text)
+    return normalized in {
+        "是",
+        "好",
+        "好的",
+        "可以",
+        "行",
+        "没问题",
+        "同意",
+        "确定",
+        "确认",
+        "确认预约",
+        "就这个",
+        "帮我约吧",
+        "帮我预约吧",
+        "yes",
+        "ok",
+    }
+
+
+def is_negative_confirmation(text: str) -> bool:
+    normalized = _compact_text(text)
+    return normalized in {"不", "不要", "不行", "不同意", "取消", "先不约", "暂时不要", "换", "换一个", "no"} or normalized.startswith("换")
 
 
 def is_recommendation_selection(text: str) -> bool:
@@ -532,47 +443,8 @@ def is_recommendation_selection(text: str) -> bool:
 
 
 def is_service_selection_after_catalog(text: str) -> bool:
-    service_type = AvailabilityService.parse_service_type(text)
-    return bool(service_type and any(keyword in text for keyword in SERVICE_SELECTION_KEYWORDS))
-
-
-def is_positive_confirmation(text: str) -> bool:
-    normalized = re.sub(r"[\s，。！？!,.、]+", "", text.strip().lower())
-    positive_phrases = {
-        "是",
-        "好",
-        "好的",
-        "可以",
-        "行",
-        "没问题",
-        "同意",
-        "确定",
-        "确认",
-        "确认预约",
-        "就这个",
-        "帮我约吧",
-        "帮我预约吧",
-        "yes",
-        "ok",
-    }
-    return normalized in positive_phrases
-
-
-def is_negative_confirmation(text: str) -> bool:
-    normalized = re.sub(r"[\s，。！？!,.、]+", "", text.strip().lower())
-    negative_phrases = {
-        "不",
-        "不要",
-        "不行",
-        "不同意",
-        "取消",
-        "先不约",
-        "暂时不要",
-        "换",
-        "换一个",
-        "no",
-    }
-    return normalized in negative_phrases or normalized.startswith("换")
+    service_type = parse_service_type(text)
+    return bool(service_type and _contains_any(text, SERVICE_SELECTION_KEYWORDS))
 
 
 def classify_static_consultation_subtypes(text: str) -> list[str]:
@@ -595,186 +467,57 @@ def classify_rule_matches(text: str) -> list[RuleMatch]:
     """Classify clear deterministic business signals into groups and subtypes."""
     normalized = text.strip()
     if not normalized:
-        return [
-            RuleMatch(
-                signal_name="other",
-                intent_group="basic_interaction",
-                subtype="empty",
-                confidence=0.98,
-            )
-        ]
+        return [RuleMatch("other", "basic_interaction", "empty", 0.98)]
 
     matches: list[RuleMatch] = []
 
     if is_unsafe_or_unsupported_request(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="unsafe_or_unsupported",
-                intent_group="safety",
-                subtype="permission_or_privacy_boundary",
-                confidence=0.99,
-            )
-        )
-        return matches
+        return [RuleMatch("unsafe_or_unsupported", "safety", "permission_or_privacy_boundary", 0.99)]
 
     if is_greeting(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="greeting",
-                intent_group="basic_interaction",
-                subtype="greeting",
-                confidence=0.98,
-            )
-        )
+        matches.append(RuleMatch("greeting", "basic_interaction", "greeting", 0.98))
     if is_courtesy(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="courtesy",
-                intent_group="basic_interaction",
-                subtype="courtesy",
-                confidence=0.98,
-            )
-        )
+        matches.append(RuleMatch("courtesy", "basic_interaction", "courtesy", 0.98))
     if is_scope_question(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="other",
-                intent_group="basic_interaction",
-                subtype="capability_scope",
-                confidence=0.9,
-            )
-        )
+        matches.append(RuleMatch("other", "basic_interaction", "capability_scope", 0.9))
 
     for subtype in classify_static_consultation_subtypes(normalized):
         matches.append(
             RuleMatch(
-                signal_name="knowledge_query",
-                intent_group="static_consultation",
-                subtype=subtype,
-                confidence=0.95,
+                "knowledge_query",
+                "static_consultation",
+                subtype,
+                0.95,
                 attributes={"extension": subtype == "membership_promotion"},
             )
         )
 
     if is_service_recommendation_request(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="service_recommendation_request",
-                intent_group="recommendation",
-                subtype="service_recommendation",
-                confidence=0.94,
-            )
-        )
-
+        matches.append(RuleMatch("service_recommendation_request", "recommendation", "service_recommendation", 0.94))
     if is_recommendation_request(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="recommendation_request",
-                intent_group="recommendation",
-                subtype="technician_recommendation",
-                confidence=0.95,
-            )
-        )
+        matches.append(RuleMatch("recommendation_request", "recommendation", "technician_recommendation", 0.95))
     if is_recommendation_replacement_request(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="recommendation_replacement",
-                intent_group="context_operation",
-                subtype="recommendation_replacement",
-                confidence=0.95,
-                requires_context=True,
-            )
-        )
+        matches.append(RuleMatch("recommendation_replacement", "context_operation", "recommendation_replacement", 0.95, True))
     if is_recommendation_selection(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="recommendation_selection",
-                intent_group="context_operation",
-                subtype="recommendation_selection",
-                confidence=0.95,
-                requires_context=True,
-            )
-        )
+        matches.append(RuleMatch("recommendation_selection", "context_operation", "recommendation_selection", 0.95, True))
     if is_positive_confirmation(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="positive_confirmation",
-                intent_group="context_operation",
-                subtype="confirmation_positive",
-                confidence=0.96,
-                requires_context=True,
-            )
-        )
+        matches.append(RuleMatch("positive_confirmation", "context_operation", "confirmation_positive", 0.96, True))
     if is_negative_confirmation(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="negative_confirmation",
-                intent_group="context_operation",
-                subtype="confirmation_negative",
-                confidence=0.96,
-                requires_context=True,
-            )
-        )
+        matches.append(RuleMatch("negative_confirmation", "context_operation", "confirmation_negative", 0.96, True))
     if is_modification_request(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="modification_request",
-                intent_group="context_operation",
-                subtype="slot_or_task_modification",
-                confidence=0.86,
-                requires_context=True,
-            )
-        )
+        matches.append(RuleMatch("modification_request", "context_operation", "slot_or_task_modification", 0.86, True))
     if is_formal_booking_request(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="formal_booking_request",
-                intent_group="booking",
-                subtype="formal_booking_commit",
-                confidence=0.96,
-            )
-        )
+        matches.append(RuleMatch("formal_booking_request", "booking", "formal_booking_commit", 0.96))
     if is_clear_appointment_start(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="appointment_request",
-                intent_group="booking",
-                subtype="booking_start",
-                confidence=0.94,
-            )
-        )
+        matches.append(RuleMatch("appointment_request", "booking", "booking_start", 0.94))
 
-    availability_service = AvailabilityService()
-    availability_intent = availability_service.classify_availability_intent_by_rules(normalized)
+    availability_intent = classify_availability_intent_by_rules(normalized)
     if availability_intent == AvailabilityIntent.AVAILABILITY:
-        matches.append(
-            RuleMatch(
-                signal_name="availability_query",
-                intent_group="availability",
-                subtype="realtime_schedule_query",
-                confidence=0.94,
-            )
-        )
+        matches.append(RuleMatch("availability_query", "availability", "realtime_schedule_query", 0.94))
     if is_availability_refinement(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="availability_refinement",
-                intent_group="context_operation",
-                subtype="availability_filter_refinement",
-                confidence=0.86,
-                requires_context=True,
-            )
-        )
+        matches.append(RuleMatch("availability_refinement", "context_operation", "availability_filter_refinement", 0.86, True))
     if is_service_selection_after_catalog(normalized):
-        matches.append(
-            RuleMatch(
-                signal_name="service_selection",
-                intent_group="context_operation",
-                subtype="service_selection",
-                confidence=0.95,
-                requires_context=True,
-            )
-        )
+        matches.append(RuleMatch("service_selection", "context_operation", "service_selection", 0.95, True))
 
     return matches
 

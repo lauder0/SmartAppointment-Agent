@@ -11,12 +11,12 @@ from agents.specialists import (
     fallback_subgraph_node,
     recommendation_subgraph_node,
 )
-from agents.supervisor.nodes import (
+from agents.supervisor.orchestration.nodes import (
     supervisor_continue_node,
     supervisor_entry_node,
     supervisor_router_node,
 )
-from agents.supervisor.response_node import supervisor_response_node
+from agents.supervisor.orchestration.response import supervisor_response_node
 from agents.supervisor.orchestration.routing import (
     route_after_agent_result,
     route_after_supervisor_continue,

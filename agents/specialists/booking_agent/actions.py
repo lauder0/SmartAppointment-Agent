@@ -1,4 +1,4 @@
-﻿"""Booking transaction graph nodes."""
+"""Booking transaction graph nodes."""
 
 from __future__ import annotations
 
@@ -10,28 +10,28 @@ from typing import Any, Dict
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from langchain_core.messages import AIMessage, HumanMessage
 
-from agents.specialists.booking.parser import InputParser  # retained for legacy test/extension patch points
-from agents.specialists.booking.message_builder import MessageBuilder
+from agents.specialists.booking_agent.parser import InputParser  # retained for legacy test/extension patch points
+from agents.specialists.booking_agent.message_builder import MessageBuilder
 from agents.understander.rules import (
     is_negative_confirmation,
     is_positive_confirmation,
     is_technician_replacement_request,
 )
-from agents.shared.node_utils import (
+from agents._shared.node_utils import (
     booking_draft_from_focus,
     focus_updates_from_booking_draft,
     last_user_text,
     merge_focus_context,
     reset_active_booking_update,
 )
-from agents.shared.slot_utils import default_duration_for_service
-from agents.shared.state import AgentState, default_booking_state, ensure_state_defaults
+from agents._shared.slot_utils import default_duration_for_service
+from agents._shared.state import AgentState, default_booking_state, ensure_state_defaults
 from config.model_provider import create_chat_model  # retained for legacy test/extension patch points
 from config.time_config import time_config
-from services.appointment_service import AppointmentService
-from services.availability_service import AvailabilityService
-from services.preference_recall_service import PreferenceRecallService
 from tools.appointment_tools import create_appointment
+from tools.availability_rule_tools import parse_preference, parse_query_criteria, parse_service_type
+from tools.preference_tools import recall_preferences as recall_preferences_tool
+from tools.technician_read_tools import check_technician_available
 from tools.technician_tools import match_technician
 
 
@@ -323,10 +323,9 @@ async def booking_parse_node(state: AgentState) -> AgentState:
         booking["match_result"] = None
         booking["match_type"] = None
 
-    service = AvailabilityService()
-    rule_criteria = service.parse_query_criteria(user_input)
-    rule_service_type = service.parse_service_type(user_input)
-    rule_preference = service.parse_preference(user_input)
+    rule_criteria = parse_query_criteria(user_input)
+    rule_service_type = parse_service_type(user_input)
+    rule_preference = parse_preference(user_input)
     route_slots = (state.get("route_decision") or {}).get("slot_updates") or {}
     explicit_technician_name = False
     parsed = _deterministic_booking_parse(
@@ -373,7 +372,8 @@ async def booking_parse_node(state: AgentState) -> AgentState:
         draft.pop("technician_name", None)
         draft.pop("technician_id", None)
 
-    recalled_preferences = PreferenceRecallService().recall(user_id)
+    recall_result = recall_preferences_tool.invoke({"user_id": user_id})
+    recalled_preferences = (recall_result.get("data") or {}).get("profile") or {}
     _apply_recalled_preferences(
         draft,
         recalled_preferences,
@@ -689,14 +689,26 @@ async def booking_guard_node(state: AgentState) -> AgentState:
             ),
         }
 
-    if not AppointmentService().is_technician_available(technician_id, start_dt, end_dt):
+    availability_check = check_technician_available.invoke(
+        {
+            "technician_id": technician_id,
+            "start_time": time_config.format_datetime(start_dt),
+            "duration_minutes": duration,
+        }
+    )
+    technician_available = bool((availability_check.get("data") or {}).get("available"))
+    if not availability_check.get("success") or not technician_available:
         booking["status"] = "drafting"
         booking["selected_option"] = None
         booking["missing_fields"] = ["start_time"]
         booking["guard_result"] = {"success": False, "reason": "technician_unavailable"}
         return {
             "booking": booking,
-            "tool_results": {**(state.get("tool_results") or {}), "booking_guard": booking["guard_result"]},
+            "tool_results": {
+                **(state.get("tool_results") or {}),
+                "booking_guard": booking["guard_result"],
+                "check_technician_available": availability_check,
+            },
             **_booking_response(
                 "booking_guard_technician_unavailable",
                 {},
@@ -808,5 +820,4 @@ async def booking_failed_node(state: AgentState) -> AgentState:
             "booking_failed",
         ),
     }
-
 

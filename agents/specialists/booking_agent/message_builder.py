@@ -134,9 +134,10 @@ class MessageBuilder:
         """创建预约失败消息"""
         if technician_name and technician_name != "未知":
             # 通过Services层访问数据库
-            from services.appointment_service import AppointmentService
-            appointment_service = AppointmentService()
-            specific_tech = appointment_service.get_technician_by_name(technician_name)
+            from tools.technician_read_tools import get_technician_by_name
+
+            result = get_technician_by_name.invoke({"technician_name": technician_name})
+            specific_tech = (result.get("data") or {}).get("technician")
             if specific_tech:
                 return f"\n机器人：抱歉，{technician_name}技师在您选择的时间段不空闲。请选择其他时间，或者我可以为您推荐其他技师。\n"
             else:

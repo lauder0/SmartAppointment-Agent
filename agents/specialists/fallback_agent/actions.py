@@ -1,4 +1,4 @@
-﻿"""Clarification and unsupported handling nodes."""
+"""Clarification and unsupported handling nodes."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ from agents.understander.rules import (
     is_courtesy,
     is_greeting,
 )
-from agents.shared.node_utils import append_assistant_message, last_user_text
+from agents._shared.node_utils import append_assistant_message, last_user_text
 from agents.response_writer.composer import composer
-from agents.shared.state import AgentState
+from agents._shared.state import AgentState
 
 
 async def unsupported_node(state: AgentState) -> AgentState:

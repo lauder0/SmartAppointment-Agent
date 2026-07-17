@@ -1,4 +1,4 @@
-﻿"""Fallback / Clarification Agent."""
+"""Fallback / Clarification Agent."""
 
 from .graph import fallback_subgraph_node
 

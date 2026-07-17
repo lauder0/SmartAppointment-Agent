@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from agents.shared.node_utils import (
+from agents._shared.node_utils import (
     focus_updates_from_availability_criteria,
     last_user_text,
     merge_focus_context,
 )
-from agents.shared.state import AgentState
+from agents._shared.state import AgentState
 from tools.availability_tools import query_availability
-from services.appointment_service import AppointmentService
+from tools.technician_read_tools import get_all_technicians
 
 
 async def availability_query_node(state: AgentState) -> AgentState:
@@ -76,7 +76,8 @@ def _base_criteria_from_focus_context(focus_context: dict | None) -> dict | None
 def _availability_options(criteria: dict | None, technician_names: list[str]) -> list[dict]:
     criteria = criteria or {}
     try:
-        technicians = AppointmentService().get_all_technicians()
+        tool_result = get_all_technicians.invoke({})
+        technicians = (tool_result.get("data") or {}).get("technicians") or []
     except Exception:
         technicians = []
     technicians_by_name = {tech.get("name"): tech for tech in technicians if tech.get("name")}

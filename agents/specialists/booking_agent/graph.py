@@ -1,4 +1,4 @@
-﻿"""Booking specialist graph entrypoint."""
+"""Booking specialist graph entrypoint."""
 
 from __future__ import annotations
 

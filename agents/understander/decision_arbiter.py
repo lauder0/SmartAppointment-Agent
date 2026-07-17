@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from agents.shared.node_utils import last_user_text, merge_focus_context
-from agents.shared.state import ensure_state_defaults
+from agents._shared.node_utils import last_user_text, merge_focus_context
+from agents._shared.state import ensure_state_defaults
 
 from .contextual_resolver import resolve_contextual_signals
 from .llm_planner import llm_plan_decision, should_call_llm

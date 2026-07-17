@@ -1,18 +1,14 @@
-﻿"""Recommendation nodes that rank verified available technicians."""
+"""Recommendation nodes that rank verified available technicians."""
 
 from __future__ import annotations
 
 from typing import Any, Dict
 
-from agents.shared.node_utils import last_user_text, merge_focus_context
-from agents.shared.slot_utils import default_duration_for_service
+from agents._shared.node_utils import last_user_text, merge_focus_context
+from agents._shared.slot_utils import default_duration_for_service
 from agents.specialists.result_contract import agent_result
 from agents.supervisor.state import SupervisorState, ensure_supervisor_defaults
-from services.service_recommendation_service import ServiceRecommendationService
-from services.technician_recommendation_service import (
-    TechnicianRecommendationService,
-    parse_recommendation_preference,
-)
+from tools.recommendation_tools import parse_preference, rank_technicians, recommend_service_item
 
 from .memory import recall_preferences
 from .state import normalize_recommendation_state
@@ -24,7 +20,8 @@ async def recommend_service_node(state: SupervisorState) -> SupervisorState:
     recommendation = normalize_recommendation_state(state.get("recommendation"))
     focus = state.get("shared_focus_context") or {}
     user_text = last_user_text(state)
-    result = ServiceRecommendationService().recommend(user_text, focus)
+    tool_result = recommend_service_item.invoke({"user_text": user_text, "focus_context": focus})
+    result = tool_result.get("data") or {}
     selected = result.get("selected") or {}
     alternatives = list(result.get("alternatives") or [])
 
@@ -79,7 +76,7 @@ async def recommend_service_node(state: SupervisorState) -> SupervisorState:
         "recommendation": recommendation,
         "tool_results": {
             **(state.get("tool_results") or {}),
-            "service_recommendation": result,
+            "recommend_service_item": tool_result,
         },
         "last_agent_result": agent_result(
             "recommendation",
@@ -94,7 +91,7 @@ async def recommend_service_node(state: SupervisorState) -> SupervisorState:
                 "alternative_services": alternatives,
                 "agent_label": "推荐机器人",
             },
-            tool_results={"service_recommendation": result},
+            tool_results={"recommend_service_item": tool_result},
             requires_user_input=True,
             next_expected_user_action="provide_time_or_request_technician_recommendation",
         ),
@@ -133,17 +130,20 @@ async def recommend_technician_node(
         or str((availability.get("criteria_snapshot") or {}).get("preference") or "")
         or str(previous_preference.get("raw_text") or "")
     )
-    preference = parse_recommendation_preference(current_text, fallback=fallback_preference)
+    preference = parse_preference(current_text, fallback=fallback_preference)
     recalled = recall_preferences(state)
     service_type = focus.get("service_type") or (availability.get("criteria_snapshot") or {}).get("service_type")
 
-    ranked = TechnicianRecommendationService().rank(
-        candidate_options=candidates,
-        preference=preference,
-        service_type=service_type,
-        recalled_preferences=recalled,
-        excluded_technician_ids=excluded_ids,
+    rank_result = rank_technicians.invoke(
+        {
+            "candidate_options": candidates,
+            "preference": preference,
+            "service_type": service_type,
+            "recalled_preferences": recalled,
+            "excluded_technician_ids": excluded_ids,
+        }
     )
+    ranked = (rank_result.get("data") or {}).get("ranked") or []
     if not ranked:
         body = "当前可约候选人已经比较完了，没有更多符合条件的技师。您可以调整时间、性别或手法偏好，我再重新查询。"
         recommendation.update(
@@ -193,12 +193,7 @@ async def recommend_technician_node(
         "recommendation": recommendation,
         "tool_results": {
             **(state.get("tool_results") or {}),
-            "technician_recommendation": {
-                "success": True,
-                "selected": selected,
-                "alternatives": alternatives,
-                "confidence": confidence,
-            },
+            "rank_technicians": rank_result,
         },
         "last_agent_result": agent_result(
             "recommendation",

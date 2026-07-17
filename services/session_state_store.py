@@ -12,13 +12,12 @@ from typing import Any, AsyncIterator, Dict, Optional, Protocol
 from dotenv import load_dotenv
 from langchain_core.messages import messages_from_dict, messages_to_dict
 
-from agents.supervisor.state import SupervisorState
-
 load_dotenv()
 
 
 DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 2
 DEFAULT_SESSION_KEY_PREFIX = "smart_appointment:session"
+SupervisorState = Dict[str, Any]
 
 
 class SessionStateStore(Protocol):

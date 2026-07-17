@@ -1,10 +1,10 @@
 """Specialist subgraph adapters for Smart Appointment 3.0."""
 
-from .availability import availability_subgraph_node
-from .booking import booking_subgraph_node
-from .consultation import consultation_subgraph_node
-from .fallback import fallback_subgraph_node
-from .recommendation import recommendation_subgraph_node
+from .availability_agent import availability_subgraph_node
+from .booking_agent import booking_subgraph_node
+from .consultation_agent import consultation_subgraph_node
+from .fallback_agent import fallback_subgraph_node
+from .recommendation_agent import recommendation_subgraph_node
 
 __all__ = [
     "availability_subgraph_node",

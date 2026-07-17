@@ -1,4 +1,4 @@
-锘縡rom __future__ import annotations
+from __future__ import annotations
 
 import unittest
 from datetime import timedelta
@@ -9,7 +9,7 @@ from api.appointment import _build_appointment_message, create_appointment
 from api.consultation import ask_consultation
 from api.task import classify_task
 from api.core.response_models import AppointmentRequest, ConsultationRequest, TaskClassificationRequest
-from agents.specialists.booking.actions import booking_guard_node
+from agents.specialists.booking_agent.actions import booking_guard_node
 from config.time_config import time_config
 
 
@@ -80,7 +80,7 @@ class LangGraphApiTests(unittest.IsolatedAsyncioTestCase):
             "booking": {
                 "status": "awaiting_confirmation",
                 "draft": {
-                    "service_type": "鑳岄儴鎺ㄦ嬁",
+                    "service_type": "背部推拿",
                     "start_time": "2026-06-10 15:00",
                     "duration_minutes": 40,
                     "technician_id": 1,
@@ -103,18 +103,21 @@ class LangGraphApiTests(unittest.IsolatedAsyncioTestCase):
             "booking": {
                 "status": "confirmed",
                 "draft": {
-                    "service_type": "鑳岄儴鎺ㄦ嬁",
+                    "service_type": "背部推拿",
                     "start_time": start_time,
                     "duration_minutes": 40,
                     "technician_id": 1,
                 },
-                "selected_option": {"technician_id": 1, "technician_name": "寮犱紵"},
+                "selected_option": {"technician_id": 1, "technician_name": "张伟"},
             },
             "tool_results": {},
         }
 
-        with patch("agents.specialists.booking.actions.AppointmentService") as service_cls:
-            service_cls.return_value.is_technician_available.return_value = True
+        class FakeAvailabilityTool:
+            def invoke(self, payload):
+                return {"success": True, "data": {"available": True}}
+
+        with patch("agents.specialists.booking_agent.actions.check_technician_available", FakeAvailabilityTool()):
             result = await booking_guard_node(state)
 
         self.assertTrue(result["tool_results"]["booking_guard"]["success"])

@@ -1,8 +1,8 @@
-﻿"""Supervisor-only nodes for 3.0 orchestration."""
+"""Supervisor-only nodes for 3.0 orchestration."""
 
 from __future__ import annotations
 
-from agents.shared.context_manager import (
+from agents._shared.context_manager import (
     apply_state_invalidations,
     changed_dependency_fields,
     invalidations_for_focus_changes,
@@ -17,7 +17,7 @@ from agents.supervisor.orchestration.controller import (
 )
 from agents.supervisor.planning.planner import build_execution_plan_with_optional_llm
 from agents.supervisor.planning.plan_reviewer import review_plan_after_result_with_optional_llm
-from agents.supervisor.router_actions import main_router_node
+from agents.supervisor.orchestration.understanding import main_router_node
 from agents.supervisor.state import (
     SupervisorState,
     ensure_supervisor_defaults,

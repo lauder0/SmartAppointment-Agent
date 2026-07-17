@@ -1,11 +1,11 @@
-﻿"""Internal workflow nodes for the booking specialist agent."""
+"""Internal workflow nodes for the booking specialist agent."""
 
 from __future__ import annotations
 
 from typing import Any, Dict
 
-from agents.specialists.booking.behavior_actions import behavior_recorder_node
-from agents.specialists.booking.actions import (
+from agents.specialists.booking_agent.behavior_actions import behavior_recorder_node
+from agents.specialists.booking_agent.actions import (
     booking_accept_recommendation_node,
     booking_complete_node,
     booking_confirmation_node,
@@ -17,7 +17,7 @@ from agents.specialists.booking.actions import (
     booking_missing_node,
     booking_parse_node,
 )
-from agents.specialists.fallback.actions import clarification_node
+from agents.specialists.fallback_agent.actions import clarification_node
 from agents.specialists.result_contract import apply_update
 
 

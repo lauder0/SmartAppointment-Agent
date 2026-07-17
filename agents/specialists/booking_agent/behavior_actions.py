@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agents.shared.state import AgentState, ensure_state_defaults
+from agents._shared.state import AgentState, ensure_state_defaults
 from tools.user_behavior_tools import record_user_behavior
 
 

@@ -1,4 +1,4 @@
-﻿"""Shared state schema for the LangGraph agent workflow."""
+"""Shared state schema for the LangGraph agent workflow."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
-from agents.shared.context_schema import default_focus_context
+from agents._shared.context_schema import default_focus_context
 from agents.supervisor.planning.plan_schema import default_execution_plan
 from agents.understander.schemas import default_task_frame
 

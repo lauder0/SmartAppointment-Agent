@@ -1,4 +1,4 @@
-﻿"""Recommendation specialist graph entrypoint."""
+"""Recommendation specialist graph entrypoint."""
 
 from __future__ import annotations
 

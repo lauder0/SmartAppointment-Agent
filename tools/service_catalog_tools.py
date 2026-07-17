@@ -1,4 +1,4 @@
-"""Shared slot normalization helpers."""
+"""Service catalog helpers exposed through the tools layer."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ def default_duration_for_service(service_type: str | None) -> int | None:
         return None
 
     normalized = str(service_type).strip()
-    if not normalized or normalized == "未知":
+    if not normalized or normalized == "???":
         return None
-    if normalized in {"按摩", "推拿", "服务", "项目"}:
+    if normalized in {"???", "???", "???", "???"}:
         return None
 
     catalog = ServiceCatalogService()
@@ -36,5 +36,4 @@ def default_duration_for_service(service_type: str | None) -> int | None:
             except (TypeError, ValueError):
                 return None
             return duration or None
-
     return None

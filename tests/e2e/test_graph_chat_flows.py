@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 import api.graph_chat_handler as graph_chat_handler
-from agents.shared.state import default_availability_result, default_focus_context
+from agents._shared.state import default_availability_result, default_focus_context
 from config.time_config import time_config
 from services.session_state_store import MemorySessionStateStore
 from tools import availability_tools
@@ -17,7 +17,7 @@ class FakeAvailabilityService:
         return {
             "date": start.replace(hour=0, minute=0),
             "duration_minutes": None,
-            "gender": "女",
+            "gender": "�?,
             "technician_name": None,
             "service_type": None,
             "preference": None,
@@ -35,7 +35,7 @@ class FakeAvailabilityService:
         return {**(base_criteria or {}), **current_criteria}
 
     def answer_availability_query(self, text, base_criteria=None):
-        return "[REPLY][咨询机器人]明天下午三点女技师李娜可约。"
+        return "[REPLY][咨询机器人]明天下午三点女技师李娜可约�?
 
     def extract_available_technician_names(self, response):
         return ["李娜"]
@@ -85,7 +85,7 @@ async def test_pending_confirmation_can_be_cancelled(graph_memory_store):
                     "duration_minutes": 60,
                 },
                 "missing_fields": [],
-                "confirmation_summary": "待确认预约",
+                "confirmation_summary": "待确认预�?,
                 "selected_option": {
                     "technician_id": 1,
                     "technician_name": "李娜",
@@ -105,4 +105,4 @@ async def test_pending_confirmation_can_be_cancelled(graph_memory_store):
     assert result["route_decision"]["action"] == "cancel_booking"
     assert result["booking"]["status"] == "cancelled"
     assert result["booking"]["draft"] == {}
-    assert "已取消" in result["final_response"]
+    assert "已取�? in result["final_response"]

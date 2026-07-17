@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from services.preference_recall_service import PreferenceRecallService
+from tools.preference_tools import recall_preferences as recall_preferences_tool
 
 
 def recall_preferences(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -18,6 +18,7 @@ def recall_preferences(state: Dict[str, Any]) -> Dict[str, Any]:
     if existing:
         return existing
     try:
-        return PreferenceRecallService().recall(state.get("user_id") or "default_user")
+        result = recall_preferences_tool.invoke({"user_id": state.get("user_id") or "default_user"})
+        return (result.get("data") or {}).get("profile") or {}
     except Exception:
         return {}

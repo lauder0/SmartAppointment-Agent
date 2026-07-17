@@ -1,8 +1,8 @@
-﻿"""Internal nodes for the availability specialist agent."""
+"""Internal nodes for the availability specialist agent."""
 
 from __future__ import annotations
 
-from agents.specialists.availability.actions import availability_query_node
+from agents.specialists.availability_agent.actions import availability_query_node
 from agents.supervisor.state import (
     SupervisorState,
     merge_agent_action_update,
