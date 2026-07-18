@@ -22,12 +22,12 @@ def resolve_contextual_signals(
     if booking.get("status") == "awaiting_confirmation":
         if "positive_confirmation" in names:
             resolved.append(_signal("confirm_pending_booking", 0.99, "context"))
+        elif "modification_request" in names or "slot_update" in names:
+            resolved.append(_signal("modify_pending_booking", 0.94, "context"))
         elif "negative_confirmation" in names:
             resolved.append(_signal("cancel_pending_booking", 0.99, "context"))
         elif "knowledge_query" in names:
             resolved.append(_signal("knowledge_interrupt_pending_booking", 0.94, "context"))
-        elif "modification_request" in names or "slot_update" in names:
-            resolved.append(_signal("modify_pending_booking", 0.94, "context"))
 
     if recommendation.get("status") == "awaiting_selection":
         if "recommendation_replacement" in names:

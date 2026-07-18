@@ -1,5 +1,6 @@
 """Web page routes."""
 
+import json
 import logging
 
 from fastapi import APIRouter, Request
@@ -7,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from api.chat_handler import ProcessUserInput_stream, reset_session
+from api.chat_handler import ProcessUserInput_event_stream, ProcessUserInput_stream, reset_session
 
 
 logger = logging.getLogger(__name__)
@@ -42,11 +43,27 @@ async def _stream_chat(message: str, session_id: str | None):
             break
 
 
+async def _stream_chat_events(message: str, session_id: str | None):
+    event_count = 0
+    async for event in ProcessUserInput_event_stream(message, session_id=session_id):
+        yield json.dumps(event, ensure_ascii=False) + "\n"
+        event_count += 1
+        if event_count >= MAX_STREAM_CHUNKS:
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "message": "响应事件过长，已自动停止。",
+                },
+                ensure_ascii=False,
+            ) + "\n"
+            break
+
+
 @router.post("/chat/stream", summary="Streaming chat")
 async def chat_stream_endpoint(chat: ChatRequest):
     return StreamingResponse(
-        _stream_chat(chat.message, chat.session_id),
-        media_type="text/plain",
+        _stream_chat_events(chat.message, chat.session_id),
+        media_type="application/x-ndjson",
     )
 
 

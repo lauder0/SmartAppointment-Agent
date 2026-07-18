@@ -11,7 +11,7 @@ SERVICE_NEED_KEYWORDS = {
     "背部推拿": ("腰", "背", "腰酸", "腰痛", "背痛", "腰背", "脊柱", "久坐", "劳损"),
     "肩颈推拿": ("肩", "颈", "脖子", "肩颈", "颈椎", "伏案", "电脑", "僵硬"),
     "足底按摩": ("脚", "足", "足底", "睡眠", "助眠", "失眠", "代谢", "疲劳"),
-    "全身推拿": ("全身", "疲劳", "放松", "累", "乏", "气血", "压力", "舒缓"),
+    "全身推拿": ("全身", "疲劳", "疲惫", "乏力", "放松", "累", "乏", "气血", "压力", "舒缓"),
 }
 
 
@@ -57,7 +57,12 @@ class ServiceRecommendationService:
     def _score_service(self, service: Dict[str, Any], text: str) -> Dict[str, Any]:
         name = str(service.get("name") or "")
         keywords = SERVICE_NEED_KEYWORDS.get(name, ())
-        matched = [keyword for keyword in keywords if keyword and keyword in text]
+        raw_matched = [keyword for keyword in keywords if keyword and keyword in text]
+        matched = [
+            keyword
+            for keyword in raw_matched
+            if not any(keyword != other and keyword in other for other in raw_matched)
+        ]
         score = 0.2 + len(matched) * 0.25
         if name and name in text:
             score += 0.7

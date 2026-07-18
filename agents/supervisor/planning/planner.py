@@ -280,9 +280,11 @@ def _route_decision_for_step(
 
 def _dedupe_actions(actions: Iterable[str]) -> List[str]:
     result: List[str] = []
+    seen: set[str] = set()
     for action in actions:
-        if action and (not result or result[-1] != action):
+        if action and action not in seen:
             result.append(action)
+            seen.add(action)
     return result
 
 
@@ -342,6 +344,7 @@ def _validate_llm_execution_plan(
     tasks: List[PlanTask] = []
     previous_task_id = None
     initial_action = _normalize_action(route_decision.get("action"))
+    seen_actions: set[str] = set()
     for index, raw_task in enumerate(raw_tasks, start=1):
         if not isinstance(raw_task, dict):
             return None
@@ -350,6 +353,9 @@ def _validate_llm_execution_plan(
             return None
         if action in BOOKING_WRITE_ACTIONS and action != initial_action:
             return None
+        if action in seen_actions:
+            return None
+        seen_actions.add(action)
         agent = raw_task.get("agent") or agent_for_action(action)
         if agent != agent_for_action(action):
             return None

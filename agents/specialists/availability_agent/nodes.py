@@ -23,7 +23,11 @@ async def query_realtime_schedule_node(state: SupervisorState) -> SupervisorStat
     response_facts = action_update.get("response_facts") or {}
     result_type = "availability_failed" if response_type == "availability_failed" else "availability_result"
     route_reason = (state.get("route_decision") or {}).get("reason")
-    suppress_response = route_reason == "prepare_candidates_for_recommendation" and bool(availability.get("options"))
+    plan = state.get("execution_plan") or {}
+    suppress_response = bool(availability.get("options")) and (
+        route_reason == "prepare_candidates_for_recommendation"
+        or _plan_has_recommendation_task(plan)
+    )
     result = agent_result(
         "availability",
         availability["status"],
@@ -32,20 +36,25 @@ async def query_realtime_schedule_node(state: SupervisorState) -> SupervisorStat
         {"availability": availability},
         response_type=response_type,
         facts=response_facts,
-        suggested_next_tasks=_availability_suggested_next_tasks(route_reason, availability),
+        suggested_next_tasks=_availability_suggested_next_tasks(route_reason, availability, plan),
     )
     if suppress_response:
         result["suppress_response"] = True
+        result["visibility"] = "internal"
     attach_agent_result(merged, state, result)
     return merged
 
 
-def _availability_suggested_next_tasks(route_reason: str | None, availability: dict) -> list[dict]:
+def _availability_suggested_next_tasks(
+    route_reason: str | None,
+    availability: dict,
+    plan: dict | None = None,
+) -> list[dict]:
     options = availability.get("options") or []
     if not options:
         return []
 
-    if route_reason == "prepare_candidates_for_recommendation":
+    if route_reason == "prepare_candidates_for_recommendation" and not _plan_has_recommendation_task(plan):
         return [
             {
                 "agent": "recommendation",
@@ -64,3 +73,10 @@ def _availability_suggested_next_tasks(route_reason: str | None, availability: d
 
     return []
 
+
+def _plan_has_recommendation_task(plan: dict | None) -> bool:
+    return any(
+        task.get("action") in {"generate_recommendation", "replace_recommendation"}
+        for task in (plan or {}).get("tasks") or []
+        if isinstance(task, dict)
+    )

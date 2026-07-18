@@ -238,11 +238,14 @@ class AvailabilityService:
             return self._answer_specific_time_query(criteria, technicians)
 
         duration_minutes = criteria["duration_minutes"] or 60
+        window_start, window_end = self._availability_window(criteria)
         slots = self._find_available_slots(
             technicians=technicians,
             target_date=criteria["date"],
             duration_minutes=duration_minutes,
-            max_slots=8
+            max_slots=8,
+            window_start=window_start,
+            window_end=window_end,
         )
 
         date_text = criteria["date"].strftime("%Y年%m月%d日")
@@ -289,6 +292,7 @@ class AvailabilityService:
         service_type = self.parse_service_type(text)
         preference = self.parse_preference(text)
         start_time = self._parse_specific_start_time(text, target_date)
+        time_period = self._parse_time_period(text)
 
         return {
             "date": target_date,
@@ -298,6 +302,7 @@ class AvailabilityService:
             "service_type": service_type,
             "preference": preference,
             "start_time": start_time,
+            "time_period": time_period,
             "has_explicit_date": self._has_explicit_date_expression(text),
             "has_explicit_time": start_time is not None,
             "has_explicit_duration": duration_minutes is not None,
@@ -305,8 +310,21 @@ class AvailabilityService:
             "has_explicit_technician_name": technician_name is not None,
             "has_explicit_service_type": service_type is not None,
             "has_explicit_preference": preference is not None,
-            "has_explicit_period": bool(re.search(r"(上午|早上|中午|下午|晚上)", text)),
+            "has_explicit_period": time_period is not None,
         }
+
+    @staticmethod
+    def _parse_time_period(text: str) -> Optional[str]:
+        period_aliases = (
+            (("\u4e0a\u5348", "\u65e9\u4e0a"), "morning"),
+            (("\u4e2d\u5348",), "noon"),
+            (("\u4e0b\u5348",), "afternoon"),
+            (("\u665a\u4e0a",), "evening"),
+        )
+        for aliases, period in period_aliases:
+            if any(alias in text for alias in aliases):
+                return period
+        return None
 
     def merge_query_criteria(
         self,
@@ -354,7 +372,7 @@ class AvailabilityService:
         elif not merged.get("start_time"):
             merged["start_time"] = current_criteria.get("start_time")
 
-        for field in ("duration_minutes", "gender", "technician_name", "service_type", "preference"):
+        for field in ("duration_minutes", "gender", "technician_name", "service_type", "preference", "time_period"):
             if current_criteria.get(field) is not None:
                 merged[field] = current_criteria[field]
 
@@ -367,6 +385,9 @@ class AvailabilityService:
         merged["has_explicit_technician_name"] = merged.get("technician_name") is not None
         merged["has_explicit_service_type"] = merged.get("service_type") is not None
         merged["has_explicit_preference"] = merged.get("preference") is not None
+        merged["has_explicit_period"] = bool(
+            base_criteria.get("has_explicit_period") or current_criteria.get("has_explicit_period")
+        )
         return merged
 
     def _has_explicit_date_expression(self, text: str) -> bool:
@@ -568,11 +589,17 @@ class AvailabilityService:
         technicians: List[Dict[str, Any]],
         target_date: datetime,
         duration_minutes: int,
-        max_slots: int
+        max_slots: int,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
     ) -> List[Dict[str, Any]]:
         start_hour, end_hour = time_config.get_business_hours()
         day_start = target_date.replace(hour=start_hour, minute=0, second=0, microsecond=0)
         day_end = target_date.replace(hour=end_hour, minute=0, second=0, microsecond=0)
+        if window_start and window_start > day_start:
+            day_start = window_start
+        if window_end and window_end < day_end:
+            day_end = window_end
         now = time_config.now()
 
         slot_start = day_start
@@ -601,6 +628,28 @@ class AvailabilityService:
             slot_start += timedelta(minutes=30)
 
         return slots
+
+    @staticmethod
+    def _availability_window(criteria: Dict[str, Any]) -> tuple[datetime | None, datetime | None]:
+        target_date = criteria.get("date")
+        period = criteria.get("time_period")
+        if not isinstance(target_date, datetime) or not period:
+            return None, None
+
+        business_start, business_end = time_config.get_business_hours()
+        period_hours = {
+            "morning": (business_start, 12),
+            "noon": (11, 14),
+            "afternoon": (13, 18),
+            "evening": (18, business_end),
+        }
+        start_hour, end_hour = period_hours.get(period, (business_start, business_end))
+        start_hour = max(start_hour, business_start)
+        end_hour = min(end_hour, business_end)
+        return (
+            target_date.replace(hour=start_hour, minute=0, second=0, microsecond=0),
+            target_date.replace(hour=end_hour, minute=0, second=0, microsecond=0),
+        )
 
     def _answer_specific_time_query(
         self,
@@ -645,11 +694,14 @@ class AvailabilityService:
                 "您可以继续告诉我服务项目、时长或技师偏好，我会继续帮您筛选可约技师。如果要正式预约，请说“确认预约”或“帮我约某位技师”。"
             )
 
+        window_start, window_end = self._availability_window(criteria)
         nearby_slots = self._find_available_slots(
             technicians=technicians,
             target_date=criteria["date"],
             duration_minutes=criteria["duration_minutes"],
-            max_slots=3
+            max_slots=3,
+            window_start=window_start,
+            window_end=window_end,
         )
         if nearby_slots:
             alternatives = "；".join(

@@ -14,6 +14,8 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": True,
+        "allowed_agents": ["consultation", "recommendation"],
         "error_codes": ["knowledge_search_failed"],
     },
     "query_availability": {
@@ -23,6 +25,8 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": True,
+        "allowed_agents": ["availability", "recommendation"],
         "error_codes": ["invalid_start_time", "availability_query_failed", "no_availability"],
     },
     "match_technician": {
@@ -32,6 +36,7 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": False,
         "error_codes": ["invalid_start_time", "no_available_technician", "technician_match_failed"],
     },
     "get_all_technicians": {
@@ -41,6 +46,8 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": True,
+        "allowed_agents": ["consultation", "availability", "recommendation"],
         "error_codes": ["technician_query_failed"],
     },
     "get_technician_by_name": {
@@ -50,6 +57,8 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": True,
+        "allowed_agents": ["consultation", "availability"],
         "error_codes": ["technician_query_failed", "technician_not_found"],
     },
     "check_technician_available": {
@@ -59,6 +68,8 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "medium",
+        "llm_callable": True,
+        "allowed_agents": ["availability", "recommendation"],
         "error_codes": ["invalid_start_time", "technician_availability_check_failed"],
     },
     "parse_availability_slots": {
@@ -68,6 +79,7 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": False,
         "error_codes": ["availability_slot_parse_failed"],
     },
     "recall_preferences": {
@@ -77,6 +89,8 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": True,
+        "allowed_agents": ["recommendation"],
         "error_codes": ["preference_recall_failed"],
     },
     "recommend_service_item": {
@@ -86,6 +100,8 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": True,
+        "allowed_agents": ["consultation", "recommendation"],
         "error_codes": ["service_recommendation_failed"],
     },
     "rank_technicians": {
@@ -95,6 +111,8 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": True,
+        "allowed_agents": ["recommendation"],
         "error_codes": ["technician_ranking_failed"],
     },
     "create_appointment": {
@@ -104,6 +122,7 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": False,
         "idempotent": True,
         "risk_level": "high",
+        "llm_callable": False,
         "requires_confirmation": True,
         "idempotency_key_fields": [
             "session_id",
@@ -128,6 +147,7 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": False,
         "risk_level": "medium",
+        "llm_callable": False,
         "error_codes": ["missing_action_type", "record_behavior_failed"],
     },
     "get_weather": {
@@ -137,6 +157,8 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
         "retryable": True,
         "idempotent": True,
         "risk_level": "low",
+        "llm_callable": True,
+        "allowed_agents": ["consultation"],
         "error_codes": ["weather_query_failed"],
     },
 }

@@ -761,6 +761,35 @@
         let match;
         while ((match = pattern.exec(text)) !== null) {
             if (match[1]) {
+                const thoughtText = escapeHtml(match[1].replace(/\[THOUGHT[^\]]*\]/, '').trim()).replace(/\n/g, '<br>');
+                result.push(`<div class="bot-thought">${thoughtText}</div>`);
+            } else if (match[2]) {
+                const replyText = stripBotProtocol(match[2]).trim();
+                const safeReply = escapeHtml(replyText).replace(/\n/g, '<br>');
+                result.push(`<div class="bot-reply">${safeReply}</div>`);
+            }
+        }
+
+        lastBotBubble.dataset.raw = text;
+        lastBotBubble.innerHTML = result.join('');
+        saveCurrentConversation();
+        requestAnimationFrame(() => {
+            chatBox.scrollTo({
+                top: chatBox.scrollHeight,
+                behavior: 'smooth'
+            });
+        });
+    }
+
+    /*
+    function updateLastBotMessage(text) {
+        if (!lastBotBubble) return;
+
+        const pattern = /(\[THOUGHT[^\]]*\][\s\S]*?)(?=\[THOUGHT|\[REPLY|\[STATE|$)|(\[REPLY[^\]]*\][\s\S]*?)(?=\[THOUGHT|\[REPLY|\[STATE|$)/g;
+        let result = [];
+        let match;
+        while ((match = pattern.exec(text)) !== null) {
+            if (match[1]) {
                 const thoughtText = match[1].replace(/\[THOUGHT[^\]]*\]/, '').trim().replace(/\n/g, '<br>');
                 result.push(`<div class="bot-thought">${thoughtText}</div>`);
             } else if (match[2]) {
@@ -791,6 +820,126 @@
         });
     }
 
+    */
+
+    function stripBotProtocol(text) {
+        let cleaned = (text || '').trim();
+        if (cleaned.startsWith('[REPLY]')) {
+            cleaned = cleaned.replace(/^\[REPLY\](\[[^\]]+\])?/, '').trim();
+        } else if (/^\[[^\]]+\]/.test(cleaned) && !cleaned.startsWith('[ERROR]')) {
+            cleaned = cleaned.replace(/^\[[^\]]+\]/, '').trim();
+        }
+        return cleaned;
+    }
+
+    function updateStreamingBotMessage(progressItems, finalText, errorText = '') {
+        if (!lastBotBubble) return;
+
+        const result = [];
+        progressItems.forEach((item) => {
+            const line = escapeHtml(item).replace(/\n/g, '<br>');
+            if (line) result.push(`<div class="bot-thought">${line}</div>`);
+        });
+
+        if (errorText) {
+            result.push(`<div class="bot-error">${escapeHtml(errorText).replace(/\n/g, '<br>')}</div>`);
+        }
+
+        const reply = stripBotProtocol(finalText);
+        if (reply) {
+            result.push(`<div class="bot-reply">${escapeHtml(reply).replace(/\n/g, '<br>')}</div>`);
+        }
+
+        lastBotBubble.dataset.raw = finalText || progressItems.join('\n') || errorText;
+        lastBotBubble.innerHTML = result.join('');
+        saveCurrentConversation();
+        requestAnimationFrame(() => {
+            chatBox.scrollTo({
+                top: chatBox.scrollHeight,
+                behavior: 'smooth'
+            });
+        });
+    }
+
+    function handleStreamEvent(event, streamState) {
+        if (!event || !event.type) return;
+
+        if (event.type === 'start' || event.type === 'progress') {
+            if (event.message && streamState.progressItems[streamState.progressItems.length - 1] !== event.message) {
+                streamState.progressItems.push(event.message);
+            }
+            updateStreamingBotMessage(streamState.progressItems, streamState.finalText);
+            return;
+        }
+
+        if (event.type === 'plan' && Array.isArray(event.tasks) && event.tasks.length > 0) {
+            const taskSummary = event.tasks
+                .map((task) => `${task.agent || 'agent'}:${task.action || 'task'}`)
+                .join(' -> ');
+            const message = event.message || `Plan: ${taskSummary}`;
+            if (streamState.progressItems[streamState.progressItems.length - 1] !== message) {
+                streamState.progressItems.push(message);
+            }
+            updateStreamingBotMessage(streamState.progressItems, streamState.finalText);
+            return;
+        }
+
+        if (event.type === 'tool_result') {
+            const message = event.message || `${event.agent || 'agent'} completed`;
+            if (streamState.progressItems[streamState.progressItems.length - 1] !== message) {
+                streamState.progressItems.push(message);
+            }
+            updateStreamingBotMessage(streamState.progressItems, streamState.finalText);
+            return;
+        }
+
+        if (event.type === 'final_delta') {
+            streamState.finalText += event.text || '';
+            updateStreamingBotMessage(streamState.progressItems, streamState.finalText);
+            return;
+        }
+
+        if (event.type === 'error') {
+            streamState.errorText = event.message || 'Request failed.';
+            updateStreamingBotMessage(streamState.progressItems, streamState.finalText, streamState.errorText);
+        }
+    }
+
+    function consumeNdjsonBuffer(buffer, streamState, flush = false) {
+        const lines = buffer.split('\n');
+        const remainder = flush ? '' : lines.pop();
+        lines.forEach((line) => {
+            const trimmed = line.trim();
+            if (!trimmed) return;
+            try {
+                handleStreamEvent(JSON.parse(trimmed), streamState);
+            } catch (error) {
+                console.error('Stream event parse error:', error, trimmed);
+            }
+        });
+        return remainder;
+    }
+
+    function setSendButtonIdle() {
+        const sendBtn = document.getElementById('send-btn');
+        sendBtn.classList.remove('is-stopping');
+        sendBtn.title = 'Send';
+        sendBtn.innerHTML = '<i class="fas fa-paper-plane" aria-hidden="true"></i><span class="btn-label">Send</span>';
+        sendBtn.disabled = false;
+        isGenerating = false;
+        currentController = null;
+    }
+
+    function setSendButtonStop() {
+        const sendBtn = document.getElementById('send-btn');
+        sendBtn.classList.add('is-stopping');
+        sendBtn.title = 'Stop';
+        sendBtn.innerHTML = '<i class="fas fa-stop" aria-hidden="true"></i><span class="btn-label">Stop</span>';
+        sendBtn.disabled = false;
+        isGenerating = true;
+    }
+
+    /*
     function setSendButtonIdle() {
         const sendBtn = document.getElementById('send-btn');
         sendBtn.classList.remove('is-stopping');
@@ -810,6 +959,8 @@
         isGenerating = true;
     }
 
+    */
+
     function stopCurrentResponse() {
         if (currentController) {
             currentController.abort();
@@ -819,6 +970,83 @@
         setSendButtonIdle();
     }
 
+    async function handleChatSubmit(e) {
+        e.preventDefault();
+
+        if (isGenerating) {
+            stopCurrentResponse();
+            return;
+        }
+
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        currentController = new AbortController();
+        const requestController = currentController;
+        setSendButtonStop();
+
+        addMessage(text, 'user');
+        userInput.value = '';
+
+        showTypingIndicator();
+        addMessage('', 'bot');
+        lastBotBubble = chatBox.querySelector('.message.bot:last-child .bubble');
+
+        try {
+            const res = await fetch('/chat/stream', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: text, session_id: sessionId}),
+                signal: requestController.signal
+            });
+
+            if (!res.ok || !res.body) {
+                throw new Error(`Chat stream failed: ${res.status}`);
+            }
+
+            hideTypingIndicator();
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            const streamState = {
+                progressItems: [],
+                finalText: '',
+                errorText: ''
+            };
+
+            while (true) {
+                const {done, value} = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, {stream: true});
+                buffer = consumeNdjsonBuffer(buffer, streamState);
+            }
+
+            buffer += decoder.decode();
+            consumeNdjsonBuffer(buffer, streamState, true);
+        } catch (error) {
+            hideTypingIndicator();
+            if (error.name === 'AbortError') {
+                if (lastBotBubble && !lastBotBubble.textContent.trim()) {
+                    lastBotBubble.innerHTML = 'Response stopped.';
+                    saveCurrentConversation();
+                }
+            } else {
+                lastBotBubble.innerHTML = 'Service unavailable. Please try again later.';
+                saveCurrentConversation();
+                console.error('Chat error:', error);
+            }
+        } finally {
+            if (currentController === requestController) {
+                setSendButtonIdle();
+            }
+            userInput.focus();
+        }
+    }
+
+    chatForm.onsubmit = handleChatSubmit;
+
+    /*
     chatForm.onsubmit = async function(e) {
         e.preventDefault();
 
@@ -849,18 +1077,30 @@
                 signal: requestController.signal
             });
 
+            if (!res.ok || !res.body) {
+                throw new Error(`Chat stream failed: ${res.status}`);
+            }
+
             hideTypingIndicator();
 
             const reader = res.body.getReader();
-            let botMsg = '';
             let decoder = new TextDecoder();
+            let buffer = '';
+            const streamState = {
+                progressItems: [],
+                finalText: '',
+                errorText: ''
+            };
 
             while (true) {
                 const {done, value} = await reader.read();
                 if (done) break;
-                botMsg += decoder.decode(value, {stream: true});
-                updateLastBotMessage(botMsg);
+                buffer += decoder.decode(value, {stream: true});
+                buffer = consumeNdjsonBuffer(buffer, streamState);
             }
+
+            buffer += decoder.decode();
+            consumeNdjsonBuffer(buffer, streamState, true);
         } catch (error) {
             hideTypingIndicator();
             if (error.name === 'AbortError') {
@@ -880,6 +1120,8 @@
             userInput.focus();
         }
     }
+
+    */
 
     async function clearConversation() {
         stopCurrentResponse();

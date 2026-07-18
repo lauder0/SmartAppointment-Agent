@@ -65,6 +65,8 @@ async def run_confirmation_flow(state: Dict[str, Any]) -> Dict[str, Any]:
 async def run_recommendation_selection_flow(state: Dict[str, Any]) -> Dict[str, Any]:
     state = await accept_recommendation(state)
     booking = state.get("booking") or {}
+    if not booking.get("selected_option"):
+        return state
     if booking.get("missing_fields"):
         return await ask_missing_slots(state)
     return await ask_confirmation(state)

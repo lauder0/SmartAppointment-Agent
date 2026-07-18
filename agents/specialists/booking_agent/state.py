@@ -16,6 +16,7 @@ def normalize_booking_state(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     booking.setdefault("selected_option", None)
     booking.setdefault("excluded_technician_ids", [])
     booking.setdefault("guard_result", None)
+    booking.setdefault("time_clarification", None)
     return booking
 
 

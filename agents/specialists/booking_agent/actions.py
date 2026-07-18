@@ -31,7 +31,7 @@ from config.time_config import time_config
 from tools.appointment_tools import create_appointment
 from tools.availability_rule_tools import parse_preference, parse_query_criteria, parse_service_type
 from tools.preference_tools import recall_preferences as recall_preferences_tool
-from tools.technician_read_tools import check_technician_available
+from tools.technician_read_tools import check_technician_available, get_technician_by_name
 from tools.technician_tools import match_technician
 
 
@@ -52,9 +52,17 @@ def _draft_missing_fields(draft: Dict[str, Any]) -> list[str]:
         missing.append("project")
     if not draft.get("duration_minutes"):
         missing.append("duration")
-    if not draft.get("technician_name") and not draft.get("technician_id") and not draft.get("gender_preference"):
-        missing.append("gender")
     return missing
+
+
+def _needs_date_clarification(criteria: Dict[str, Any]) -> bool:
+    start_time = criteria.get("start_time")
+    if not start_time or criteria.get("has_explicit_date"):
+        return False
+    try:
+        return start_time <= time_config.now()
+    except TypeError:
+        return False
 
 
 def _seed_draft_from_availability(state: AgentState, draft: Dict[str, Any]) -> Dict[str, Any]:
@@ -173,9 +181,56 @@ def _selected_recommendation_for_booking(
     requested_name = slot_updates.get("technician_name")
     if requested_name:
         for candidate in _recommendation_candidates(recommendation):
-            if candidate.get("technician_name") == requested_name:
+            if _normalized_technician_name(candidate.get("technician_name")) == _normalized_technician_name(requested_name):
                 return candidate
+        return {"technician_name": requested_name}
     return dict(recommendation.get("selected_recommendation") or {})
+
+
+def _normalized_technician_name(value: Any) -> str:
+    name = re.sub(r"\s+", "", str(value or ""))
+    return name[:-2] if name.endswith("\u6280\u5e08") else name
+
+
+def _resolve_selected_technician(
+    selected: Dict[str, Any],
+    recommendation: Dict[str, Any],
+    availability_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    resolved = dict(selected or {})
+    requested_name = resolved.get("technician_name")
+    if resolved.get("technician_id") and requested_name:
+        return resolved
+
+    target_name = _normalized_technician_name(requested_name)
+    candidates = [
+        *_recommendation_candidates(recommendation),
+        *((availability_result or {}).get("options") or []),
+    ]
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        if target_name and _normalized_technician_name(candidate.get("technician_name")) != target_name:
+            continue
+        technician_id = candidate.get("technician_id") or candidate.get("id")
+        technician_name = candidate.get("technician_name") or candidate.get("name")
+        if technician_id and technician_name:
+            return {**candidate, **resolved, "technician_id": technician_id, "technician_name": technician_name}
+
+    if not requested_name:
+        return resolved
+    lookup = get_technician_by_name.invoke({"technician_name": requested_name})
+    technician = (lookup.get("data") or {}).get("technician") or {}
+    technician_id = technician.get("id") or technician.get("technician_id")
+    technician_name = technician.get("name") or technician.get("technician_name")
+    if technician_id and technician_name:
+        return {
+            **technician,
+            **resolved,
+            "technician_id": technician_id,
+            "technician_name": technician_name,
+        }
+    return resolved
 
 
 def _recommendation_candidates(recommendation: Dict[str, Any]) -> list[Dict[str, Any]]:
@@ -324,6 +379,10 @@ async def booking_parse_node(state: AgentState) -> AgentState:
         booking["match_type"] = None
 
     rule_criteria = parse_query_criteria(user_input)
+    needs_date_clarification = _needs_date_clarification(rule_criteria)
+    booking["time_clarification"] = "implicit_past_time" if needs_date_clarification else None
+    if needs_date_clarification:
+        draft.pop("start_time", None)
     rule_service_type = parse_service_type(user_input)
     rule_preference = parse_preference(user_input)
     route_slots = (state.get("route_decision") or {}).get("slot_updates") or {}
@@ -336,9 +395,9 @@ async def booking_parse_node(state: AgentState) -> AgentState:
         rule_preference,
     )
 
-    if parsed.get("start_time") and parsed["start_time"] != "未知" and _has_time_expression(user_input):
+    if not needs_date_clarification and parsed.get("start_time") and parsed["start_time"] != "未知" and _has_time_expression(user_input):
         draft["start_time"] = parsed["start_time"]
-    if rule_criteria.get("start_time") and _has_time_expression(user_input):
+    if not needs_date_clarification and rule_criteria.get("start_time") and _has_time_expression(user_input):
         draft["start_time"] = _merge_rule_start_time(draft, rule_criteria)
     if parsed.get("duration") and parsed["duration"] != "未知" and (
         draft.get("duration_minutes") or _has_duration_expression(user_input)
@@ -386,6 +445,8 @@ async def booking_parse_node(state: AgentState) -> AgentState:
         state.get("focus_context"),
         focus_updates_from_booking_draft(draft),
     )
+    if needs_date_clarification:
+        focus_context["start_time"] = None
     booking.update(
         {
             "draft": draft,
@@ -414,12 +475,15 @@ async def booking_missing_node(state: AgentState) -> AgentState:
     missing = booking.get("missing_fields") or _draft_missing_fields(booking.get("draft") or {})
     booking["missing_fields"] = missing
     booking["status"] = "drafting"
+    body = MessageBuilder().create_missing_info_questions(missing)
+    if booking.get("time_clarification") == "implicit_past_time":
+        body = "您说的时间今天已经过去了，请补充日期，例如‘明天下午三点’。"
     return {
         "booking": booking,
         **_booking_response(
             "booking_missing_slots",
             {
-                "body": MessageBuilder().create_missing_info_questions(missing),
+                "body": body,
                 "agent_label": "预约机器人",
             },
             "booking_missing",
@@ -476,6 +540,11 @@ async def booking_accept_recommendation_node(state: AgentState) -> AgentState:
         recommendation,
         (state.get("route_decision") or {}).get("slot_updates") or {},
     )
+    selected = _resolve_selected_technician(
+        selected,
+        recommendation,
+        state.get("availability_result") or {},
+    )
     criteria = (state.get("availability_result") or {}).get("criteria_snapshot") or {}
     focus_context = state.get("focus_context") or {}
 
@@ -483,13 +552,13 @@ async def booking_accept_recommendation_node(state: AgentState) -> AgentState:
     technician_name = selected.get("technician_name")
     if not technician_id or not technician_name:
         booking["status"] = "drafting"
-        booking["missing_fields"] = ["technician_id"]
+        booking["missing_fields"] = []
         return {
             "booking": booking,
             **_booking_response(
                 "booking_failed",
                 {
-                    "body": "当前没有可接受的推荐技师，请先让我重新推荐一位。",
+                    "body": f"没有找到{technician_name or selected.get('technician_name') or '这位'}技师，请重新选择一位可约技师。",
                     "agent_label": "预约机器人",
                 },
                 "booking_failed",
@@ -693,7 +762,7 @@ async def booking_guard_node(state: AgentState) -> AgentState:
         {
             "technician_id": technician_id,
             "start_time": time_config.format_datetime(start_dt),
-            "duration_minutes": duration,
+            "duration_minutes": duration_minutes,
         }
     )
     technician_available = bool((availability_check.get("data") or {}).get("available"))
@@ -820,4 +889,3 @@ async def booking_failed_node(state: AgentState) -> AgentState:
             "booking_failed",
         ),
     }
-

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from api.graph_chat_handler import ProcessUserInput_graph_stream, reset_graph_session
+from api.graph_chat_handler import (
+    ProcessUserInput_graph_stream,
+    process_user_input_graph_events,
+    reset_graph_session,
+)
 
 
 async def reset_session(session_id: str) -> None:
@@ -18,6 +22,17 @@ async def ProcessUserInput_stream(user_input, session_id=None, state=None, conte
         user_id=user_id,
     ):
         yield token
+
+
+async def ProcessUserInput_event_stream(user_input, session_id=None, state=None, context=None):
+    """Structured progress stream for Web UI clients."""
+    user_id = _extract_user_id(state, context)
+    async for event in process_user_input_graph_events(
+        user_input,
+        session_id=session_id,
+        user_id=user_id,
+    ):
+        yield event
 
 
 def _extract_user_id(state=None, context=None) -> str:

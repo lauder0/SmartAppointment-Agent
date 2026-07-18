@@ -15,8 +15,12 @@ class MessageBuilder:
             "gender": "您希望选择男技师还是女技师呢？",
             "start_time": "请问您想预约的时间是？",
             "duration": "请问您需要多长时间的服务？",
+            "duration_minutes": "请问您需要多长时间的服务？",
             "project": "请问您需要什么服务项目？比如全身推拿、肩颈推拿、足底按摩或背部推拿。",
-            "preference": "您对技师有力气大小等偏好吗？"
+            "service_type": "请问您需要什么服务项目？比如全身推拿、肩颈推拿、足底按摩或背部推拿。",
+            "preference": "您对技师有力气大小等偏好吗？",
+            "technician_id": "请重新选择一位可约技师。",
+            "technician_name": "请告诉我您想选择哪位技师。",
         }
     
     def create_appointment_success_message(
@@ -147,7 +151,10 @@ class MessageBuilder:
     
     def create_missing_info_questions(self, missing_info: List[str]) -> str:
         """根据缺失信息创建询问"""
-        questions = [self.missing_info_prompts.get(field, f"请补充{field}信息") for field in missing_info]
+        questions = [
+            self.missing_info_prompts.get(field, "请补充预约所需信息。")
+            for field in missing_info
+        ]
         return "\n" + " ".join(questions) + "\n"
     
     def create_unrelated_message(self) -> str:

@@ -6,9 +6,11 @@ from typing import Any, Dict
 
 from agents._shared.node_utils import last_user_text, merge_focus_context
 from agents._shared.slot_utils import default_duration_for_service
+from agents._shared.tool_calling import get_allowed_tools, run_tool_calling_agent
 from agents.specialists.result_contract import agent_result
 from agents.supervisor.state import SupervisorState, ensure_supervisor_defaults
 from tools.recommendation_tools import parse_preference, rank_technicians, recommend_service_item
+from tools.technician_read_tools import get_all_technicians
 
 from .memory import recall_preferences
 from .state import normalize_recommendation_state
@@ -109,6 +111,14 @@ async def recommend_technician_node(
     candidates = list(availability.get("options") or [])
 
     if not candidates:
+        tool_calling_update = await _try_tool_calling_technician_recommendation(
+            state=state,
+            recommendation=recommendation,
+            replace_current=replace_current,
+        )
+        if tool_calling_update:
+            return tool_calling_update
+
         body = (
             "我还没有可用于推荐的实时排班候选人。请先告诉我想预约的日期、时间和时长，"
             "我查到可约技师后再为您比较推荐。"
@@ -218,6 +228,181 @@ async def recommend_technician_node(
             next_expected_user_action="accept_recommendation | choose_alternative | change_preference",
         ),
     }
+
+
+async def _try_tool_calling_technician_recommendation(
+    *,
+    state: SupervisorState,
+    recommendation: Dict[str, Any],
+    replace_current: bool,
+) -> SupervisorState | None:
+    """Use read-only tools to query availability and rank candidates when possible."""
+    action = "replace_recommendation" if replace_current else "generate_recommendation"
+    user_text = last_user_text(state)
+    focus = state.get("shared_focus_context") or {}
+    result = await run_tool_calling_agent(
+        agent_name="recommendation",
+        action=action,
+        state=state,
+        prompt=_recommendation_tool_prompt(user_text, focus, state.get("availability") or {}),
+        allowed_tools=get_allowed_tools("recommendation", action),
+        system_prompt=(
+            "You are the technician recommendation specialist. Use only read-only tools. "
+            "If availability candidates are missing, query availability first, then rank technicians. "
+            "Never create appointments."
+        ),
+    )
+    ranked = _ranked_from_tool_calling(result)
+    if not ranked:
+        ranked = _rank_from_availability_tool_results(result, state, focus)
+    if not result.get("success") or not ranked:
+        return None
+
+    preference = parse_preference(user_text, fallback=str(focus.get("preference") or ""))
+    service_type = focus.get("service_type")
+    criteria = _availability_criteria_from_tool_calling(result)
+    selected = ranked[0]
+    alternatives = ranked[1:3]
+    reason = _recommendation_reason(selected, preference, service_type)
+    body = _recommendation_body(
+        selected=selected,
+        alternatives=alternatives,
+        preference=preference,
+        service_type=service_type,
+        criteria=criteria,
+        reason=reason,
+    )
+    recommendation.update(
+        {
+            "status": "awaiting_selection",
+            "candidate_recommendations": ranked,
+            "selected_recommendation": selected,
+            "alternative_recommendations": alternatives,
+            "preference": preference,
+            "recommendation_reason": reason,
+            "confidence": _recommendation_confidence(ranked),
+            "trigger_reason": "tool_calling_recommendation",
+        }
+    )
+    response_facts = {
+        "body": body,
+        "recommended_technician": selected,
+        "alternative_technicians": alternatives,
+        "criteria": criteria,
+        "preference": preference,
+    }
+    return {
+        "recommendation": recommendation,
+        "tool_results": {
+            **(state.get("tool_results") or {}),
+            "recommendation_tool_calling": result,
+            **(result.get("tool_results") or {}),
+        },
+        "last_agent_result": agent_result(
+            "recommendation",
+            "awaiting_selection",
+            "technician_recommended",
+            None,
+            {"recommendation": recommendation},
+            response_type="technician_recommendation",
+            facts=response_facts,
+            suggested_next_tasks=[
+                {
+                    "agent": "booking",
+                    "action": "select_recommended_technician",
+                    "reason": "recommendation_ready_for_selection",
+                    "input": {"selected_recommendation": selected},
+                    "auto_continue": False,
+                    "task_type": "booking_confirmation",
+                    "primary_intent": "select_recommended_technician",
+                }
+            ],
+            requires_user_input=True,
+            next_expected_user_action="accept_recommendation | choose_alternative | change_preference",
+        ),
+    }
+
+
+def _recommendation_tool_prompt(user_text: str, focus: Dict[str, Any], availability: Dict[str, Any]) -> str:
+    return (
+        "User request:\n"
+        f"{user_text}\n\n"
+        "Shared focus context:\n"
+        f"{focus}\n\n"
+        "Current availability state:\n"
+        f"{availability}\n\n"
+        "Task:\n"
+        "- Recommend a technician only from verified availability candidates.\n"
+        "- If current availability has no options but the user/context includes enough time information, call query_availability first.\n"
+        "- Call recall_preferences and rank_technicians when candidates are available.\n"
+        "- Return a concise Chinese recommendation. Do not create appointments."
+    )
+
+
+def _ranked_from_tool_calling(result: Dict[str, Any]) -> list[Dict[str, Any]]:
+    tool_results = result.get("tool_results") or {}
+    rank_result = tool_results.get("rank_technicians") or {}
+    ranked = (rank_result.get("data") or {}).get("ranked") or []
+    return list(ranked) if isinstance(ranked, list) else []
+
+
+def _rank_from_availability_tool_results(
+    result: Dict[str, Any],
+    state: SupervisorState,
+    focus: Dict[str, Any],
+) -> list[Dict[str, Any]]:
+    """Deterministically bridge availability tool output into ranking input."""
+    tool_results = result.setdefault("tool_results", {})
+    availability_result = tool_results.get("query_availability") or {}
+    availability_data = availability_result.get("data") or {}
+    names = availability_data.get("available_technician_names") or []
+    if not names:
+        return []
+
+    all_technicians_result = tool_results.get("get_all_technicians")
+    if not all_technicians_result:
+        all_technicians_result = get_all_technicians.invoke({})
+        tool_results["get_all_technicians"] = all_technicians_result
+    technicians = (all_technicians_result.get("data") or {}).get("technicians") or []
+    technicians_by_name = {technician.get("name"): technician for technician in technicians if technician.get("name")}
+    criteria = availability_data.get("criteria") or {}
+    candidates = []
+    for index, name in enumerate(names, start=1):
+        technician = technicians_by_name.get(name) or {}
+        candidates.append(
+            {
+                "option_id": f"tool_opt_{index}",
+                "technician_id": technician.get("id"),
+                "technician_name": name,
+                "gender": technician.get("gender"),
+                "strength": technician.get("strength"),
+                "start_time": criteria.get("start_time"),
+                "duration_minutes": criteria.get("duration_minutes"),
+                "service_type": criteria.get("service_type"),
+                "gender_preference": criteria.get("gender"),
+                "preference": criteria.get("preference"),
+            }
+        )
+
+    preference = parse_preference(last_user_text(state), fallback=str(focus.get("preference") or ""))
+    rank_result = rank_technicians.invoke(
+        {
+            "candidate_options": candidates,
+            "preference": preference,
+            "service_type": focus.get("service_type") or criteria.get("service_type"),
+            "recalled_preferences": recall_preferences(state),
+            "excluded_technician_ids": (state.get("recommendation") or {}).get("excluded_technician_ids") or [],
+        }
+    )
+    tool_results["rank_technicians"] = rank_result
+    ranked = (rank_result.get("data") or {}).get("ranked") or []
+    return list(ranked) if isinstance(ranked, list) else []
+
+
+def _availability_criteria_from_tool_calling(result: Dict[str, Any]) -> Dict[str, Any]:
+    tool_results = result.get("tool_results") or {}
+    availability_result = tool_results.get("query_availability") or {}
+    return (availability_result.get("data") or {}).get("criteria") or {}
 
 
 def _result_update(recommendation: Dict[str, Any], body: str, result_type: str) -> SupervisorState:

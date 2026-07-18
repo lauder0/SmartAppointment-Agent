@@ -81,6 +81,7 @@ def default_booking_state() -> Dict[str, Any]:
         "selected_option": None,
         "excluded_technician_ids": [],
         "guard_result": None,
+        "time_clarification": None,
     }
 
 

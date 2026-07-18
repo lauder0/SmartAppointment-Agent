@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from config.model_provider import create_chat_model
+from agents._shared.tool_calling import get_allowed_tools, run_tool_calling_agent
 from agents.understander.rules import (
     is_appointment_policy_question,
     is_business_hours_question,
@@ -48,6 +49,10 @@ async def knowledge_consult_node(state: AgentState) -> AgentState:
             update["focus_context"] = merge_focus_context(state.get("focus_context"), focus_updates)
         return update
 
+    tool_calling_update = await _try_consultation_tool_calling(state, user_input)
+    if tool_calling_update:
+        return tool_calling_update
+
     result = await search_knowledge.ainvoke({"query": user_input, "top_k": 3})
     docs = []
     if result.get("success"):
@@ -64,6 +69,59 @@ async def knowledge_consult_node(state: AgentState) -> AgentState:
     if focus_updates:
         update["focus_context"] = merge_focus_context(state.get("focus_context"), focus_updates)
     return update
+
+
+async def _try_consultation_tool_calling(state: AgentState, user_input: str) -> AgentState | None:
+    """Let the consultation agent choose among read-only tools for open questions."""
+    prompt = _consultation_tool_prompt(user_input, state)
+    result = await run_tool_calling_agent(
+        agent_name="consultation",
+        action="answer_knowledge",
+        state=state,
+        prompt=prompt,
+        allowed_tools=get_allowed_tools("consultation", "answer_knowledge"),
+        system_prompt=(
+            "You are the consultation specialist in a massage-shop appointment system. "
+            "Use only the provided tools when facts are needed. Do not claim a booking "
+            "has been created. Do not call or request write-side tools. Answer in concise Chinese."
+        ),
+    )
+    answer = (result.get("answer") or "").strip()
+    if not result.get("success") or not answer:
+        return None
+
+    focus_updates = _service_recommendation_focus_updates(user_input, answer, state)
+    update: AgentState = {
+        "response_type": "knowledge_answer",
+        "response_facts": {
+            "answer": answer,
+            "tool_calling": True,
+        },
+        "tool_results": {
+            **(state.get("tool_results") or {}),
+            "consultation_tool_calling": result,
+            **(result.get("tool_results") or {}),
+        },
+    }
+    if focus_updates:
+        update["focus_context"] = merge_focus_context(state.get("focus_context"), focus_updates)
+    return update
+
+
+def _consultation_tool_prompt(user_input: str, state: AgentState) -> str:
+    focus = state.get("focus_context") or {}
+    return (
+        "User question:\n"
+        f"{user_input}\n\n"
+        "Shared focus context:\n"
+        f"{focus}\n\n"
+        "Task:\n"
+        "- Answer the user's consultation question for the massage shop.\n"
+        "- If the question asks for services, prices, policies, address, hours, or project details, search knowledge.\n"
+        "- If the question asks for technicians, use technician read tools.\n"
+        "- If the user describes symptoms or a need and asks what to choose, use service recommendation.\n"
+        "- Return only the final user-facing Chinese answer, without JSON and without [REPLY] prefix."
+    )
 
 
 def _static_focus_updates(user_input: str) -> dict:
@@ -152,4 +210,3 @@ def _infer_service_from_text(text: str) -> str | None:
         if any(keyword in text for keyword in keywords):
             return service_type
     return None
-

@@ -20,6 +20,7 @@ class SpecialistResult(TypedDict, total=False):
     suggested_next_tasks: List[Dict[str, Any]]
     requires_user_input: bool
     next_expected_user_action: Optional[str]
+    visibility: str
     error: Optional[str]
 
 
